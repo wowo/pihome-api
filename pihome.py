@@ -12,6 +12,16 @@ def switch_list():
 
     return jsonify({'count': len(data), 'total': len(data), '_embedded': data})
 
+
+@app.route('/switch/<key>', methods = ['PATCH'])
+def switch_toggle(key):
+    switch = SwitchService()
+    data = switch.toggle(key, request.values.get('state'))
+
+    return jsonify(data)
+
+
 if __name__ != 'pithermo': # wsgi
     if __name__ == "__main__" and len(sys.argv) == 1:
         app.run(host='0.0.0.0', port=8999, debug=True)
+app.run(host='0.0.0.0', port=8999, debug=True)
