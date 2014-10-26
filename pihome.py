@@ -21,7 +21,6 @@ def switch_toggle(key):
     return jsonify(data)
 
 
-if __name__ != 'pithermo': # wsgi
+if __name__ != 'pihome-api': # wsgi
     if __name__ == "__main__" and len(sys.argv) == 1:
         app.run(host='0.0.0.0', port=8999, debug=True)
-app.run(host='0.0.0.0', port=8999, debug=True)
