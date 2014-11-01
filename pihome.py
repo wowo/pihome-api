@@ -2,15 +2,19 @@
 
 from flask import Flask, jsonify, request
 from switch import SwitchService
+from sensor import SensorService
+import sys
 
 app = Flask(__name__)
+
+def hal_response(data):
+    return jsonify({'count': len(data), 'total': len(data), '_embedded': data})
 
 @app.route('/switch', methods = ['GET'])
 def switch_list():
     switch = SwitchService()
-    data = switch.get_list()
 
-    return jsonify({'count': len(data), 'total': len(data), '_embedded': data})
+    return hal_response(switch.get_list())
 
 
 @app.route('/switch/<key>', methods = ['PATCH'])
@@ -19,6 +23,12 @@ def switch_toggle(key):
     data = switch.toggle(key, request.values.get('state'))
 
     return jsonify(data)
+
+@app.route('/sensor', methods = ['GET'])
+def sensor_list():
+    sensor = SensorService()
+
+    return hal_response(sensor.get_list())
 
 
 @app.after_request

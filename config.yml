@@ -20,3 +20,15 @@ switch:
             name: 'Lampa piwnica hall'
             type: ethernet
             address: 5
+sensor:
+    w1thermometer:
+        base_path: '/sys/bus/w1/devices/'
+    devices:
+        outdoor_west:
+            name: 'Na zewnątrz - zachód'
+            type: w1thermometer
+            address: '28-000002726a7c'
+        office:
+            name: 'Gabinet'
+            type: w1thermometer
+            address: '28-00000613e0ac'

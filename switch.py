@@ -1,9 +1,10 @@
 #!/usr/bin/python
 
-import yaml
+from datetime import datetime
+from xml.dom.minidom import parseString
 import os
 import urllib2
-from xml.dom.minidom import parseString
+import yaml
 
 class SwitchService:
     def __init__(self):
@@ -36,7 +37,8 @@ class SwitchService:
         return {
             'key': key,
             'name': device['name'],
-            'state': self.get_state(device)
+            'state': self.get_state(device),
+            'when': str(datetime.now())
         }
 
 
@@ -45,6 +47,8 @@ class SwitchService:
             return EthernetSwitch(self.config['ethernet']['address'], params['address'])
         elif 'raspberry' == params['type']:
             return RaspberrySwitch(params)
+        else:
+            raise RuntimeError('Unknown switch driver')
 
 class EthernetSwitch:
     def __init__(self, url, address):
