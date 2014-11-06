@@ -3,6 +3,7 @@
 from flask import Flask, jsonify, request
 from switch import SwitchService
 from sensor import SensorService
+import json
 import sys
 
 app = Flask(__name__)
@@ -20,7 +21,8 @@ def switch_list():
 @app.route('/switch/<key>', methods = ['PATCH'])
 def switch_toggle(key):
     switch = SwitchService()
-    data = switch.toggle(key, request.values.get('state'))
+    input = json.loads(request.data)
+    data = switch.toggle(key, input['state'])
 
     return jsonify(data)
 
