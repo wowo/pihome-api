@@ -2,7 +2,9 @@
 
 from datetime import datetime
 from xml.dom.minidom import parseString
+import json
 import os
+import pika
 import urllib2
 import yaml
 
@@ -44,14 +46,22 @@ class SwitchService:
 
     def __get_switch_driver(self, params):
         if 'ethernet' == params['type']:
-            return EthernetSwitch(self.config['ethernet']['address'], params['address'])
+            return EthernetSwitch(params['id'], self.config['ethernet']['address'], params['address'])
         elif 'raspberry' == params['type']:
             return RaspberrySwitch(params)
         else:
             raise RuntimeError('Unknown switch driver')
 
-class EthernetSwitch:
-    def __init__(self, url, address):
+class AbstractSwitch:
+    def notify_state_change(self, sensor_key, new_state):
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        channel = connection.channel()
+        channel.queue_declare(queue='switch_state', durable=True)
+        channel.basic_publish(exchange='', routing_key='switch_state', body=json.dumps({'key': sensor_key, 'state': new_state, 'date': str(datetime.now())}))
+
+class EthernetSwitch(AbstractSwitch):
+    def __init__(self, id, url, address):
+        self.id = id
         self.address = address
         self.url = 'http://' + url
 
@@ -65,7 +75,8 @@ class EthernetSwitch:
         current_state = self.get_state()
         if current_state != new_state:
             urllib2.urlopen(self.url + '/leds.cgi?led=' + str(self.address)).read()
+            self.notify_state_change(self.id, new_state)
 
-class RaspberrySwitch:
+class RaspberrySwitch(AbstractSwitch):
     def get_state(self):
         return -1

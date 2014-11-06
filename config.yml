@@ -5,18 +5,22 @@ switch:
         path: '/sys/class/gpio/'
     devices:
         heating_ground_floor:
+            id: heating_ground_floor
             name: 'Podłogówka parter'
             type: ethernet
             address: 6
         heating_first_floor:
+            id: heating_first_floor
             name: 'Podłogówka piętro'
             type: ethernet
             address: 7
         light_stairs:
+            id: light_stairs
             name: 'Lampa piwinica schody'
             type: ethernet
             address: 4
         light_hall:
+            id: light_hall
             name: 'Lampa piwnica hall'
             type: ethernet
             address: 5
