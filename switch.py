@@ -57,7 +57,10 @@ class AbstractSwitch:
         connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
         channel = connection.channel()
         channel.queue_declare(queue='switch_state', durable=True)
-        channel.basic_publish(exchange='', routing_key='switch_state', body=json.dumps({'key': sensor_key, 'state': new_state, 'date': str(datetime.now())}))
+        channel.basic_publish(exchange='',
+                              routing_key='switch_state',
+                              properties=pika.BasicProperties(delivery_mode = 2), # make message persistent
+                              body=json.dumps({'key': sensor_key, 'state': new_state, 'date': str(datetime.now())}))
 
 class EthernetSwitch(AbstractSwitch):
     def __init__(self, id, url, address):

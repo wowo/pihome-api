@@ -14,6 +14,11 @@ switch:
             name: 'Podłogówka piętro'
             type: ethernet
             address: 7
+        hot_water_pump:
+            id: hot_water_pump
+            name: 'Pompa CWU'
+            type: ethernet
+            address: 3
         light_stairs:
             id: light_stairs
             name: 'Lampa piwinica schody'
@@ -36,3 +41,10 @@ sensor:
             name: 'Gabinet'
             type: w1thermometer
             address: '28-00000613e0ac'
+storing:
+    mongo:
+        host: 'linus.mongohq.com'
+        port: 10080
+        user: 'pithermo'
+        pass: 'pi2013'
+        collection: 'pithermo'

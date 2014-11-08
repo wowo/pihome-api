@@ -44,6 +44,12 @@ def add_cors(resp):
 
     return resp
 
+if not app.debug:
+    import logging
+    from logging import FileHandler
+    file_handler = FileHandler('app.log')
+    file_handler.setLevel(logging.WARNING)
+    app.logger.addHandler(file_handler)
 
 if __name__ != 'pihome-api': # wsgi
     if __name__ == "__main__" and len(sys.argv) == 1:
