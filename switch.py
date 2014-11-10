@@ -56,7 +56,6 @@ class AbstractSwitch:
     def notify_state_change(self, sensor_key, new_state):
         connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
         channel = connection.channel()
-        channel.queue_declare(queue='switch_state', durable=True)
         channel.basic_publish(exchange='',
                               routing_key='switch_state',
                               properties=pika.BasicProperties(delivery_mode = 2), # make message persistent

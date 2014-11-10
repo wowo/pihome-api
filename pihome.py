@@ -47,7 +47,7 @@ def add_cors(resp):
 if not app.debug:
     import logging
     from logging import FileHandler
-    file_handler = FileHandler('app.log')
+    file_handler = FileHandler('/tmp/app.log')
     file_handler.setLevel(logging.WARNING)
     app.logger.addHandler(file_handler)
 
