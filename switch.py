@@ -1,12 +1,15 @@
 #!/usr/bin/python
 
-from datetime import datetime
+from celery import Celery
+from datetime import datetime, timedelta
 from xml.dom.minidom import parseString
 import json
 import os
 import pika
 import urllib2
 import yaml
+
+celery = Celery('switch', broker='amqp://localhost//')
 
 class SwitchService:
     def __init__(self):
@@ -25,9 +28,14 @@ class SwitchService:
         return self.__get_switch_driver(device).get_state()
 
 
-    def toggle(self, key, new_state):
+    def toggle(self, key, new_state, duration=None):
         device = self.config['devices'][key]
         self.__get_switch_driver(device).set_state(new_state)
+
+        if duration is not None:
+            eta = datetime.utcnow() + timedelta(minutes=duration)
+            from tasks import toggle_switch
+            toggle_switch.apply_async((key, 1 if new_state == "0" else 0), eta=eta)
 
         return self.__get_switch(key)
 

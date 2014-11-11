@@ -22,7 +22,7 @@ def switch_list():
 def switch_toggle(key):
     switch = SwitchService()
     input = json.loads(request.data)
-    data = switch.toggle(key, input['state'])
+    data = switch.toggle(key, input['state'], input['duration'] if 'duration' in input else None)
 
     return jsonify(data)
 
