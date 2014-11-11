@@ -11,9 +11,26 @@ import yaml
 
 class StoringService:
     def __init__(self):
-        self.config = yaml.load(file(os.path.dirname(os.path.realpath(__file__)) + '/config.yml'))['storing']['mongo']
+        self.base_config = yaml.load(file(os.path.dirname(os.path.realpath(__file__)) + '/config.yml'))
+        self.config = self.base_config['storing']['mongo']
         self.retry_delay = 10 * 1000
-        #self.retry_delay = 5000
+
+    def __get_db(self):
+        self.conn = MongoClient(self.config['host'], self.config['port'])
+        db = self.conn[self.config['collection']]
+        db.authenticate(self.config['user'], self.config['pass'])
+
+        return db
+
+    def get_events_history(self, page, count):
+        events = []
+        for document in self.__get_db().switches.find().sort('date', -1)[page * count - count : page * count]:
+            document['name'] = self.base_config['switch']['devices'][document['switch']]['name']
+            del document['created_at']
+            del document['_id']
+            events.append(document)
+
+        return events
 
     def store_switch_state(self,ch, method, properties, body):
         try:
@@ -21,18 +38,14 @@ class StoringService:
             data = json.loads(body)
             print "Store switch %s state %s at %s" % (data['key'], data['state'], data['date'])
 
-            conn = MongoClient(self.config['host'], self.config['port'])
-            self.db = conn[self.config['collection']]
-            self.db.authenticate(self.config['user'], self.config['pass'])
-
             date = datetime.strptime(data['date'], '%Y-%m-%d %H:%M:%S.%f')
-            self.db.switches.insert({
+            self.__get_db().switches.insert({
                 'date': date,
                 'created_at': datetime.now(),
                 'switch': data['key'],
                 'state': data['state']
             })
-            conn.disconnect()
+            self.conn.disconnect()
         except Exception as e:
             print "\t%s occured with: %s" % (type(e), e)
             ch.basic_publish('dlx', 'switch_state', body, properties=properties)
@@ -61,12 +74,13 @@ class StoringService:
 service = StoringService()
 queue_to_handle = 'switch_state' if len(sys.argv) == 1 else sys.argv[1]
 
-print ' [*] Waiting for messages in ' + queue_to_handle
+if __name__ == '__main__':
+    print ' [*] Waiting for messages in ' + queue_to_handle
 
-logging.basicConfig()
-if queue_to_handle == 'switch_state':
-    service.consume_switch_state()
-elif queue_to_handle == 'dead_letter':
-    service.consume_dead_letter()
-else:
-    print ' [X] Invalid queue: ' + queue_to_handle
+    logging.basicConfig()
+    if queue_to_handle == 'switch_state':
+        service.consume_switch_state()
+    elif queue_to_handle == 'dead_letter':
+        service.consume_dead_letter()
+    else:
+        print ' [X] Invalid queue: ' + queue_to_handle

@@ -1,15 +1,21 @@
 #!/usr/bin/python
 
-from flask import Flask, jsonify, request
-from switch import SwitchService
+from datetime import datetime
+from flask import Flask, jsonify, request, Response
 from sensor import SensorService
+from store import StoringService
+from switch import SwitchService
 import json
 import sys
 
 app = Flask(__name__)
 
 def hal_response(data):
-    return jsonify({'count': len(data), 'total': len(data), '_embedded': data})
+    dthandler = lambda obj: obj.isoformat() if isinstance(obj, datetime) else None
+
+    return Response(response=json.dumps(({'count': len(data), 'total': len(data), '_embedded': data}), default=dthandler),
+             status = 200,
+             mimetype='application/json')
 
 @app.route('/switch', methods = ['GET'])
 def switch_list():
@@ -31,6 +37,14 @@ def sensor_list():
     sensor = SensorService()
 
     return hal_response(sensor.get_list())
+
+@app.route('/history', methods = ['GET'])
+def history_list():
+    page = int(request.args['page']) if 'page' in request.args else 1
+    count = int(request.args['count']) if 'count' in request.args else 25
+    storing = StoringService()
+
+    return hal_response(storing.get_events_history(page, count))
 
 
 @app.after_request
