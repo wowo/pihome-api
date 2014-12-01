@@ -1,10 +1,11 @@
 #!/usr/bin/python
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, Response
 from sensor import SensorService
 from store import StoringService
 from switch import SwitchService
+import dateutil.parser
 import json
 import sys
 
@@ -37,6 +38,15 @@ def sensor_list():
     sensor = SensorService()
 
     return hal_response(sensor.get_list())
+
+@app.route('/reading', methods = ['GET'])
+def reading_list():
+    since = dateutil.parser.parse(request.args['since']) if 'since' in request.args else datetime.now() - timedelta(days=1)
+    until = dateutil.parser.parse(request.args['until']) if 'until' in request.args else None
+ 
+    service = StoringService()
+
+    return hal_response(service.get_reading_list(since, until))
 
 @app.route('/history', methods = ['GET'])
 def history_list():

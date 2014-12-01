@@ -9,6 +9,8 @@ import pika
 import sys
 import yaml
 
+DATE_FORMAT='%m-%d %H:%M'
+
 class StoringService:
     def __init__(self):
         self.base_config = yaml.load(file(os.path.dirname(os.path.realpath(__file__)) + '/config.yml'))
@@ -31,6 +33,38 @@ class StoringService:
             events.append(document)
 
         return events
+
+
+    def get_reading_list(self, since, until = None):
+        documents = []
+        headers = {'date': 'Data'}
+
+        criteria = {'$gte': since}
+        if until:
+            criteria['$lte'] = until
+
+        for document in self.__get_db().temperatures.find({'date': criteria }).sort('date', -1):
+            documents.append(document)
+            for address in document['sensors']:
+                if address not in headers and 'name' in document['sensors'][address]:
+                    headers[address] = document['sensors'][address]['name']
+
+        row = []
+        for key in headers:
+            row.append(headers[key])
+
+        data = [row]
+
+        for document in documents:
+            row = [document['date'].strftime(DATE_FORMAT)]
+            for key in headers:
+                if key != 'date':
+                    row.append(document['sensors'][key]['temperature'] if key in document['sensors'] else None)
+
+            data.append(row)
+
+        return data
+
 
     def store_switch_state(self,ch, method, properties, body):
         try:

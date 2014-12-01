@@ -1,6 +1,6 @@
 switch:
     ethernet:
-        address: 192.168.254.106
+        address: 192.168.254.109
     raspberry:
         path: '/sys/class/gpio/'
     devices:
@@ -38,9 +38,13 @@ sensor:
             type: w1thermometer
             address: '28-000002726a7c'
         office:
-            name: 'Gabinet'
+            name: 'Gabinet Raspberry Pi (okno)'
             type: w1thermometer
             address: '28-00000613e0ac'
+        office2:
+            name: 'Gabinet'
+            type: w1thermometer
+            address: '28-0000047632af'
 storing:
     mongo:
         host: 'linus.mongohq.com'
