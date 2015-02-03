@@ -1,25 +1,30 @@
 #!/usr/bin/python
 
-from celery import Celery
+from celery.task.control import inspect
+from celery.task.control import revoke
 from datetime import datetime, timedelta
 from xml.dom.minidom import parseString
 import json
+import memcache
 import os
 import pika
 import urllib2
 import yaml
 
-celery = Celery('switch', broker='amqp://localhost//')
-
 class SwitchService:
     def __init__(self):
         self.config = yaml.load(file(os.path.dirname(os.path.realpath(__file__)) + '/config.yml'))['switch']
+        self.cache = memcache.Client(['localhost:11211'], debug=0)
+        self.__schedule = None
+        self.__revoked = None
 
 
-    def get_list(self):
+    def get_list(self, fresh):
         switches = {}
         for key in self.config['devices']:
-            switches[key] = self.__get_switch(key)
+            if fresh:
+                self.cache.delete(key)
+            switches[key] = self.__get_switch(str(key))
 
         return switches
 
@@ -31,25 +36,54 @@ class SwitchService:
     def toggle(self, key, new_state, duration=None):
         device = self.config['devices'][key]
         self.__get_switch_driver(device).set_state(new_state)
+        self.cache.delete(str(key))
 
         if duration is not None:
             eta = datetime.utcnow() + timedelta(minutes=duration)
             from tasks import toggle_switch
             toggle_switch.apply_async((key, 1 if new_state == "0" else 0), eta=eta)
+            self.__schedule = None
+            self.__revoked = None
 
-        return self.__get_switch(key)
-
+        return self.__get_switch(str(key))
 
 
     def __get_switch(self, key):
-        device = self.config['devices'][key]
+        info = self.cache.get(key)
+        if info is None:
+            device = self.config['devices'][key]
 
-        return {
-            'key': key,
-            'name': device['name'],
-            'state': self.get_state(device),
-            'when': str(datetime.now())
-        }
+            scheduled = None
+            revoked = self.__get_revoked()
+            for entry in self.__get_schedule():
+                args = eval(entry['request']['args'])
+                if args[0] == key and entry['request']['id'] not in revoked:
+                    scheduled = {'when': entry['eta'], 'state': args[1]}
+                    break
+
+            info = {
+                'key': key,
+                'name': device['name'],
+                'state': self.get_state(device),
+                'when': str(datetime.now()),
+                'scheduled': scheduled
+            }
+            self.cache.set(key, info)
+        
+        return info
+
+    def __get_schedule(self):
+        if self.__schedule is None:
+            self.__schedule = inspect().scheduled()['celery@raspberrypi']
+
+        return self.__schedule
+
+
+    def __get_revoked(self):
+        if self.__revoked is None:
+            self.__revoked = inspect().revoked()['celery@raspberrypi']
+
+        return self.__revoked
 
 
     def __get_switch_driver(self, params):

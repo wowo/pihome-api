@@ -22,7 +22,7 @@ def hal_response(data):
 def switch_list():
     switch = SwitchService()
 
-    return hal_response(switch.get_list())
+    return hal_response(switch.get_list(request.args.get('fresh', False)))
 
 
 @app.route('/switch/<key>', methods = ['PATCH'])
