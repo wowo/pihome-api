@@ -9,7 +9,7 @@ import pika
 import sys
 import yaml
 
-DATE_FORMAT='%m-%d %H:%M'
+DATE_FORMAT='%Y-%m-%d %H:%M'
 
 class StoringService:
     def __init__(self):
@@ -37,29 +37,16 @@ class StoringService:
 
     def get_reading_list(self, since, until = None):
         documents = []
-        headers = {'date': 'Data'}
 
         criteria = {'$gte': since}
         if until:
             criteria['$lte'] = until
 
+        data = []
         for document in self.__get_db().temperatures.find({'date': criteria }).sort('date', -1):
-            documents.append(document)
+            row = {'x': document['date'].strftime(DATE_FORMAT)}
             for address in document['sensors']:
-                if address not in headers and 'name' in document['sensors'][address]:
-                    headers[address] = document['sensors'][address]['name']
-
-        row = []
-        for key in headers:
-            row.append(headers[key])
-
-        data = [row]
-
-        for document in documents:
-            row = [document['date'].strftime(DATE_FORMAT)]
-            for key in headers:
-                if key != 'date':
-                    row.append(document['sensors'][key]['temperature'] if key in document['sensors'] else None)
+                row[document['sensors'][address]['id']] = document['sensors'][address]['temperature']
 
             data.append(row)
 
