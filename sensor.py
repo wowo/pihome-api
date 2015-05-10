@@ -48,7 +48,7 @@ class W1Thermometer:
     
     def get_value(self):
         if not os.path.exists(self.base_path + self.address):
-            raise RuntimeError('sensor with %s address does not exists' % self.address)
+            return 'n/a '
 
         temperature = None
         while temperature is None:

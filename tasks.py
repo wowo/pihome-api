@@ -5,6 +5,7 @@ import json
 import urllib2
 
 celery = Celery('tasks', broker='amqp://localhost//')
+#celery.config_from_object('celeryconfig')
 
 @celery.task
 def toggle_switch(key, new_state):
@@ -15,4 +16,3 @@ def toggle_switch(key, new_state):
     request = urllib2.Request(url, data, {'Content-Type': 'application/json'})
     request.get_method = lambda: 'PATCH'
     urllib2.urlopen(request).read()
-    

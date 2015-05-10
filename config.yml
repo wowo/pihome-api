@@ -21,30 +21,30 @@ switch:
             address: 3
         light_stairs:
             id: light_stairs
-            name: 'Lampa piwinica schody'
+            name: 'Lampa schody'
             type: ethernet
             address: 4
         light_hall:
             id: light_hall
-            name: 'Lampa piwnica hall'
+            name: 'Lampa hall'
             type: ethernet
             address: 5
 sensor:
     w1thermometer:
         base_path: '/sys/bus/w1/devices/'
     devices:
-        outdoor_west:
-            name: 'Na zewnątrz - zachód'
-            type: w1thermometer
-            address: '28-000002726a7c'
-        office:
-            name: 'Gabinet Raspberry Pi (okno)'
+        #outdoor_west:
+        #    name: 'Zewnątrz zachód'
+        #    type: w1thermometer
+        #    address: '28-000002726a7c'
+        outdoor_north:
+            name: 'Zewnątrz północ'
             type: w1thermometer
             address: '28-00000613e0ac'
-        office2:
+        office:
             name: 'Gabinet'
             type: w1thermometer
-            address: '28-0000047632af'
+            address: '28-000004765573'
 storing:
     mongo:
         host: 'linus.mongohq.com'
