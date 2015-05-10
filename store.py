@@ -8,6 +8,7 @@ import os
 import pika
 import sys
 import yaml
+import traceback
 
 DATE_FORMAT='%Y-%m-%d %H:%M'
 
@@ -66,9 +67,10 @@ class StoringService:
                 'switch': data['key'],
                 'state': data['state']
             })
-            self.conn.disconnect()
+            self.conn.close()
         except Exception as e:
             print "\t%s occured with: %s" % (type(e), e)
+            traceback.print_exc()
             ch.basic_publish('dlx', 'switch_state', body, properties=properties)
 
     def consume_switch_state(self):
