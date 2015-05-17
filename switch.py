@@ -117,7 +117,7 @@ class EthernetSwitch(AbstractSwitch):
 
     def set_state(self, new_state):
         current_state = self.get_state()
-        if current_state != new_state:
+        if int(current_state) != int(new_state):
             urllib2.urlopen(self.url + '/leds.cgi?led=' + str(self.address)).read()
             self.notify_state_change(self.id, new_state)
 
