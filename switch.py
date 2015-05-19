@@ -39,7 +39,7 @@ class SwitchService:
         self.cache.delete(str(key))
 
         if duration is not None:
-            eta = datetime.utcnow() + timedelta(minutes=duration)
+            eta = datetime.utcnow() + timedelta(minutes=int(duration))
             from tasks import toggle_switch
             toggle_switch.apply_async((key, 1 if new_state == "0" else 0), eta=eta)
             self.__schedule = None
