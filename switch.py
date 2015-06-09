@@ -11,13 +11,14 @@ import pika
 import urllib2
 import yaml
 
+
 class SwitchService:
     def __init__(self):
-        self.config = yaml.load(file(os.path.dirname(os.path.realpath(__file__)) + '/config.yml'))['switch']
+        path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
+        self.config = yaml.load(file(path))['switch']
         self.cache = memcache.Client(['localhost:11211'], debug=0)
         self.__schedule = None
         self.__revoked = None
-
 
     def get_list(self, fresh):
         switches = {}
@@ -28,10 +29,8 @@ class SwitchService:
 
         return switches
 
-
     def get_state(self, device):
         return self.__get_switch_driver(device).get_state()
-
 
     def toggle(self, key, new_state, duration=None):
         device = self.config['devices'][key]
@@ -39,14 +38,14 @@ class SwitchService:
         self.cache.delete(str(key))
 
         if duration is not None:
-            eta = datetime.utcnow() + timedelta(minutes=int(duration))
             from tasks import toggle_switch
-            toggle_switch.apply_async((key, 1 if new_state == "0" else 0), eta=eta)
+            eta = datetime.utcnow() + timedelta(minutes=int(duration))
+            toggled = 1 if int(new_state) == 0 else 0
+            toggle_switch.apply_async((key, toggled), eta=eta)
             self.__schedule = None
             self.__revoked = None
 
         return self.__get_switch(str(key))
-
 
     def __get_switch(self, key):
         info = self.cache.get(key)
@@ -58,18 +57,17 @@ class SwitchService:
             for entry in self.__get_schedule():
                 args = eval(entry['request']['args'])
                 if args[0] == key and entry['request']['id'] not in revoked:
-                    scheduled = {'when': entry['eta'], 'state': args[1]}
+                    scheduled = {'when': entry['eta'],
+                                 'state': args[1]}
                     break
 
-            info = {
-                'key': key,
-                'name': device['name'],
-                'state': self.get_state(device),
-                'when': str(datetime.now()),
-                'scheduled': scheduled
-            }
+            info = {'key': key,
+                    'name': device['name'],
+                    'state': self.get_state(device),
+                    'when': str(datetime.now()),
+                    'scheduled': scheduled}
             self.cache.set(key, info)
-        
+
         return info
 
     def __get_schedule(self):
@@ -78,30 +76,36 @@ class SwitchService:
 
         return self.__schedule
 
-
     def __get_revoked(self):
         if self.__revoked is None:
             self.__revoked = inspect().revoked()['celery@raspberrypi']
 
         return self.__revoked
 
-
     def __get_switch_driver(self, params):
         if 'ethernet' == params['type']:
-            return EthernetSwitch(params['id'], self.config['ethernet']['address'], params['address'])
+            return EthernetSwitch(params['id'],
+                                  self.config['ethernet']['address'],
+                                  params['address'])
         elif 'raspberry' == params['type']:
             return RaspberrySwitch(params)
         else:
             raise RuntimeError('Unknown switch driver')
 
+
 class AbstractSwitch:
     def notify_state_change(self, sensor_key, new_state):
-        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        payload = {'key': sensor_key,
+                   'state': new_state,
+                   'date': str(datetime.now())}
+        parameters = pika.ConnectionParameters('localhost')
+        connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
         channel.basic_publish(exchange='',
                               routing_key='switch_state',
-                              properties=pika.BasicProperties(delivery_mode = 2), # make message persistent
-                              body=json.dumps({'key': sensor_key, 'state': new_state, 'date': str(datetime.now())}))
+                              properties=pika.BasicProperties(delivery_mode=2),
+                              body=json.dumps(payload))
+
 
 class EthernetSwitch(AbstractSwitch):
     def __init__(self, id, url, address):
@@ -112,14 +116,17 @@ class EthernetSwitch(AbstractSwitch):
     def get_state(self):
         statusXml = urllib2.urlopen(self.url + '/status.xml').read()
         xml = parseString(statusXml)
+        node_name = 'led' + str(self.address)
 
-        return xml.getElementsByTagName('led' + str(self.address))[0].firstChild.nodeValue
+        return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
 
     def set_state(self, new_state):
         current_state = self.get_state()
         if int(current_state) != int(new_state):
-            urllib2.urlopen(self.url + '/leds.cgi?led=' + str(self.address)).read()
+            address = self.url + '/leds.cgi?led=' + str(self.address)
+            urllib2.urlopen(address).read()
             self.notify_state_change(self.id, new_state)
+
 
 class RaspberrySwitch(AbstractSwitch):
     def get_state(self):

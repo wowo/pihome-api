@@ -5,7 +5,8 @@ import json
 import urllib2
 
 celery = Celery('tasks', broker='amqp://localhost//')
-#celery.config_from_object('celeryconfig')
+# celery.config_from_object('celeryconfig')
+
 
 @celery.task
 def toggle_switch(key, new_state):

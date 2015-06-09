@@ -10,11 +10,13 @@ import sys
 import yaml
 import traceback
 
-DATE_FORMAT='%Y-%m-%d %H:%M'
+DATE_FORMAT = '%Y-%m-%d %H:%M'
+
 
 class StoringService:
     def __init__(self):
-        self.base_config = yaml.load(file(os.path.dirname(os.path.realpath(__file__)) + '/config.yml'))
+        path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
+        self.base_config = yaml.load(file(path))
         self.config = self.base_config['storing']['mongo']
         self.retry_delay = 10 * 1000
 
@@ -27,38 +29,42 @@ class StoringService:
 
     def get_events_history(self, page, count):
         events = []
-        for document in self.__get_db().switches.find().sort('date', -1)[page * count - count : page * count]:
-            document['name'] = self.base_config['switch']['devices'][document['switch']]['name']
+        devices_config = self.base_config['switch']['devices']
+        iterator = self.__get_db().switches.find().sort('date', -1)
+        for document in iterator[page * count - count:page * count]:
+            document['name'] = devices_config[document['switch']]['name']
             del document['created_at']
             del document['_id']
             events.append(document)
 
         return events
 
-
-    def get_reading_list(self, since, until = None):
+    def get_reading_list(self, since, until=None):
         documents = []
 
-        criteria = {'$gte': since}
+        criteria = {'date': {'$gte': since}}
         if until:
-            criteria['$lte'] = until
+            criteria['date']['$lte'] = until
 
         data = []
-        for document in self.__get_db().temperatures.find({'date': criteria }).sort('date', -1):
+        iterator = self.__get_db().temperatures.find(criteria).sort('date', -1)
+        for document in iterator:
             row = {'x': document['date'].strftime(DATE_FORMAT)}
             for address in document['sensors']:
-                row[document['sensors'][address]['id']] = document['sensors'][address]['temperature']
-
+                id = document['sensors'][address]['id']
+                row[id] = document['sensors'][address]['temperature']
             data.append(row)
 
         return data
 
-
-    def store_switch_state(self,ch, method, properties, body):
+    def store_switch_state(self, ch, method, properties, body):
         try:
-            ch.basic_ack(delivery_tag = method.delivery_tag)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
             data = json.loads(body)
-            print "Store switch %s state %s at %s" % (data['key'], data['state'], data['date'])
+            print "Store switch %s state %s at %s" % (
+                data['key'],
+                data['state'],
+                data['date'])
 
             date = datetime.strptime(data['date'], '%Y-%m-%d %H:%M:%S.%f')
             self.__get_db().switches.insert({
@@ -71,24 +77,31 @@ class StoringService:
         except Exception as e:
             print "\t%s occured with: %s" % (type(e), e)
             traceback.print_exc()
-            ch.basic_publish('dlx', 'switch_state', body, properties=properties)
+            ch.basic_publish('dlx',
+                             'switch_state',
+                             body,
+                             properties=properties)
 
     def consume_switch_state(self):
-        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        parameters = pika.ConnectionParameters('localhost')
+        connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
 
         channel.exchange_declare(exchange='switch_state', type='direct')
         channel.queue_declare(queue='switch_state', durable=True)
-        channel.queue_bind('switch_state', 'switch_state',routing_key='switch_state')
+        channel.queue_bind('switch_state',
+                           'switch_state',
+                           routing_key='switch_state')
 
-        channel.exchange_declare(exchange='dlx', type='direct') 
-        dead_letter_queue = channel.queue_declare(queue='dead_letter', durable=True, arguments={
-            'x-message-ttl': self.retry_delay,
-            'x-dead-letter-exchange' : 'switch_state',
-            'x-dead-letter-routing-key': 'switch_state'
-        })
+        channel.exchange_declare(exchange='dlx', type='direct')
+        dead_letter_queue = channel.queue_declare(
+            queue='dead_letter',
+            durable=True,
+            arguments={'x-message-ttl': self.retry_delay,
+                       'x-dead-letter-exchange': 'switch_state',
+                       'x-dead-letter-routing-key': 'switch_state'})
         channel.queue_bind(exchange='dlx',
-                           routing_key='switch_state', # x-dead-letter-routing-key
+                           routing_key='switch_state',
                            queue=dead_letter_queue.method.queue)
 
         channel.basic_consume(self.store_switch_state, queue='switch_state')
