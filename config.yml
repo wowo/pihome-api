@@ -47,8 +47,9 @@ sensor:
             address: '28-000004765573'
 storing:
     mongo:
-        host: 'the.host'
+        host: 'linus.mongohq.com'
         port: 10080
-        user: 'theuser'
-        pass: 'thepass'
+        user: 'pithermo'
+        pass: 'pi2013'
         collection: 'pithermo'
+
