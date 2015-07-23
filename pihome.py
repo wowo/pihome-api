@@ -59,7 +59,7 @@ def reading_list():
 
     until = None
     if 'until' in request.args:
-        until = dateutil.parser.parse(request.args['until'])
+        until = dateutil.parser.parse(request.args['until'] + ' 23:59:59')
 
     service = StoringService()
 

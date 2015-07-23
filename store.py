@@ -51,8 +51,9 @@ class StoringService:
         for document in iterator:
             row = {'x': document['date'].strftime(DATE_FORMAT)}
             for address in document['sensors']:
-                id = document['sensors'][address]['id']
-                row[id] = document['sensors'][address]['temperature']
+                if document['sensors'][address]['temperature'] < 85:
+                    id = document['sensors'][address]['id']
+                    row[id] = document['sensors'][address]['temperature']
             data.append(row)
 
         return data
