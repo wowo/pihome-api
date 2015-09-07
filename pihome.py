@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+from crontab import CronTab
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, Response
 from sensor import SensorService
@@ -8,6 +9,7 @@ from switch import SwitchService
 import dateutil.parser
 import json
 import sys
+import uuid
 
 app = Flask(__name__)
 
@@ -75,6 +77,49 @@ def history_list():
     return hal_response(storing.get_events_history(page, count))
 
 
+@app.route('/cron', methods=['GET'])
+def cron_list():
+    cron = CronTab(user=True)
+    result = []
+
+    for job in cron:
+        if job.comment.find('pihome-api') != -1:
+            result.append(json.loads(job.comment.replace('pihome-api ', ''))) 
+
+    return hal_response(result)
+
+
+@app.route('/cron', methods=['POST'])
+def cron_create():
+    input = json.loads(request.data)
+    id = str(uuid.uuid4())
+    command = 'curl localhost/api/switch/%s -XPATCH -d \'{"state": "%d"}\'  -H \'Content-Type: application/json\'' % (input['switch'], int(input['state']))
+    cron = CronTab(user=True)
+    job = cron.new(command=command)
+    job.setall(input["schedule"])
+    comment = {
+        'id': id,
+        'switch': input['switch'],
+        'state': input['state'],
+        'schedule': job.slices.render(),
+    }
+    job.comment = 'pihome-api ' + json.dumps(comment)
+    cron.write()
+
+    return jsonify(comment)
+
+    
+@app.route('/cron/<id>', methods=['DELETE'])
+def cron_delete(id):
+    cron = CronTab(user=True)
+    for job in cron:
+        if job.comment.find(id) != -1:
+            cron.remove(job)
+            cron.write()
+
+
+    return ''
+    
 @app.after_request
 def add_cors(resp):
     """ Ensure all responses have the CORS headers.
