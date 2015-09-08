@@ -1,8 +1,10 @@
 #!/usr/bin/python
+import os
 
 from crontab import CronTab
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, Response
+import yaml
 from sensor import SensorService
 from store import StoringService
 from switch import SwitchService
@@ -22,7 +24,7 @@ def hal_response(data):
                'total': len(data),
                '_embedded': data}
 
-    return Response(response=json.dumps((payload), default=dthandler),
+    return Response(response=json.dumps(payload, default=dthandler),
                     status=200,
                     mimetype='application/json')
 
@@ -37,10 +39,10 @@ def switch_list():
 @app.route('/switch/<key>', methods=['PATCH'])
 def switch_toggle(key):
     switch = SwitchService()
-    input = json.loads(request.data)
+    input_data = json.loads(request.data)
     data = switch.toggle(key,
-                         input['state'],
-                         input['duration'] if 'duration' in input else None)
+                         input_data['state'],
+                         input_data['duration'] if 'duration' in input_data else None)
 
     return jsonify(data)
 
@@ -82,25 +84,30 @@ def cron_list():
     cron = CronTab(user=True)
     result = []
 
+    path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
+    config = yaml.load(file(path))['switch']
     for job in cron:
         if job.comment.find('pihome-api') != -1:
-            result.append(json.loads(job.comment.replace('pihome-api ', ''))) 
+            task_data = json.loads(job.comment.replace('pihome-api ', ''))
+            task_data['name'] = config['devices'][task_data['switch']]['name']
+            result.append(task_data)
 
     return hal_response(result)
 
 
 @app.route('/cron', methods=['POST'])
 def cron_create():
-    input = json.loads(request.data)
-    id = str(uuid.uuid4())
-    command = 'curl localhost/api/switch/%s -XPATCH -d \'{"state": "%d"}\'  -H \'Content-Type: application/json\'' % (input['switch'], int(input['state']))
+    input_data = json.loads(request.data)
+    new_id = str(uuid.uuid4())
+    command = 'curl localhost/api/switch/%s -XPATCH -d \'{"state": "%d"}\'  -H \'Content-Type: application/json\'' % (
+        input_data['switch'], int(input_data['state']))
     cron = CronTab(user=True)
     job = cron.new(command=command)
-    job.setall(input["schedule"])
+    job.setall(input_data["schedule"])
     comment = {
-        'id': id,
-        'switch': input['switch'],
-        'state': input['state'],
+        'id': new_id,
+        'switch': input_data['switch'],
+        'state': input_data['state'],
         'schedule': job.slices.render(),
     }
     job.comment = 'pihome-api ' + json.dumps(comment)
@@ -108,18 +115,18 @@ def cron_create():
 
     return jsonify(comment)
 
-    
-@app.route('/cron/<id>', methods=['DELETE'])
-def cron_delete(id):
+
+@app.route('/cron/<cron_id>', methods=['DELETE'])
+def cron_delete(cron_id):
     cron = CronTab(user=True)
     for job in cron:
-        if job.comment.find(id) != -1:
+        if job.comment.find(cron_id) != -1:
             cron.remove(job)
             cron.write()
 
-
     return ''
-    
+
+
 @app.after_request
 def add_cors(resp):
     """ Ensure all responses have the CORS headers.
@@ -134,9 +141,11 @@ def add_cors(resp):
 
     return resp
 
+
 if not app.debug:
     import logging
     from logging import FileHandler
+
     file_handler = FileHandler('/tmp/app.log')
     file_handler.setLevel(logging.WARNING)
     app.logger.addHandler(file_handler)
