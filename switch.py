@@ -7,7 +7,6 @@ import json
 import memcache
 import os
 import pika
-import RPi.GPIO as GPIO
 import urllib2
 import yaml
 
@@ -135,15 +134,24 @@ class RaspberrySwitch(AbstractSwitch):
     def __init__(self, pin, seconds):
         self.pin = pin
         self.seconds = seconds
-        GPIO.setup(self.pin, GPIO.OUT)
-        GPIO.setmode(GPIO.BCM)
+        export = open('/sys/class/gpio/export', 'w')
+        export.write(str(self.pin))
+        export.close()
+        direction = open('/sys/class/gpio/gpio%/direction' % str(self.pin))
+        direction.write('out')
+        direction.close()
 
     def get_state(self):
-        return GPIO.input(self.pin)
+        value = open('/sys/class/gpio/gpio%/value' % str(self.pin))
+        state = value.readall()
+        value.close()
+        return int(state)
 
     def set_state(self, new_state):
         if int(new_state) != self.get_state():
-            GPIO.output(self.pin, int(new_state))
+            value = open('/sys/class/gpio/gpio%/value' % str(self.pin))
+            value.write(str(new_state))
+            value.close()
             self.notify_state_change(self.pin, int(new_state))
 
     def get_duration(self):
