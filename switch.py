@@ -138,9 +138,14 @@ class RaspberrySwitch(AbstractSwitch):
             export = open('/sys/class/gpio/export', 'w')
             export.write(str(self.pin))
             export.close()
-            direction = open('/sys/class/gpio/gpio%s/direction' % str(self.pin))
+            direction = open('/sys/class/gpio/gpio%s/direction' % str(self.pin), 'w')
             direction.write('out')
             direction.close()
+
+    def __del__(self):
+        export = open('/sys/class/gpio/unexport', 'w')
+        export.write(str(self.pin))
+        export.close()
 
     def get_state(self):
         value = open('/sys/class/gpio/gpio%s/value' % str(self.pin), 'r')
