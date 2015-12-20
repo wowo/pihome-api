@@ -31,9 +31,11 @@ switch:
             address: 5
         blind_dinning_up:
             pin: 14
+            name : 'Roleta jadalnia góra'
             time: 29
         blind_dinning_down:
             pin: 15
+            name : 'Roleta jadalnia dół'
             time: 29
 sensor:
     w1thermometer:
