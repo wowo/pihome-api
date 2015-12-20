@@ -144,7 +144,7 @@ class RaspberrySwitch(AbstractSwitch):
 
     def get_state(self):
         value = open('/sys/class/gpio/gpio%s/value' % str(self.pin), 'r')
-        state = value.readall()
+        state = value.read().strip()
         value.close()
         return int(state)
 
