@@ -37,7 +37,7 @@ class SwitchService:
         driver.set_state(new_state)
         self.cache.delete(str(key))
 
-        duration = driver.get_duration() if 'get_duration' in dir(driver) else duration
+        duration = driver.get_duration(new_state) if 'get_duration' in dir(driver) else duration
 
         if duration is not None:
             from tasks import toggle_switch
@@ -155,5 +155,5 @@ class RaspberrySwitch(AbstractSwitch):
             value.close()
             self.notify_state_change(self.pin, int(new_state))
 
-    def get_duration(self):
-        return timedelta(seconds=int(self.seconds))
+    def get_duration(self, new_state):
+        return timedelta(seconds=int(self.seconds)) if int(new_state) == 1 else None
