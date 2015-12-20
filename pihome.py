@@ -42,7 +42,7 @@ def switch_toggle(key):
     input_data = json.loads(request.data)
     data = switch.toggle(key,
                          input_data['state'],
-                         input_data['duration'] if 'duration' in input_data else None)
+                         timedelta(minutes=int(input_data['duration'])) if 'duration' in input_data else None)
 
     return jsonify(data)
 

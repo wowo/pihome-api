@@ -55,4 +55,4 @@ target/
 
 *.sw[op]
 
-.idea/
+.idea/*

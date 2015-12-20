@@ -1,13 +1,13 @@
 #!/usr/bin/python
 
 from celery.task.control import inspect
-from celery.task.control import revoke
 from datetime import datetime, timedelta
 from xml.dom.minidom import parseString
 import json
 import memcache
 import os
 import pika
+import RPi.GPIO as GPIO
 import urllib2
 import yaml
 
@@ -34,12 +34,15 @@ class SwitchService:
 
     def toggle(self, key, new_state, duration=None):
         device = self.config['devices'][key]
-        self.__get_switch_driver(device).set_state(new_state)
+        driver = self.__get_switch_driver(device)
+        driver.set_state(new_state)
         self.cache.delete(str(key))
+
+        duration = driver.get_duration() if 'get_duration' in dir(driver) else duration
 
         if duration is not None:
             from tasks import toggle_switch
-            eta = datetime.utcnow() + timedelta(minutes=int(duration))
+            eta = datetime.utcnow() + duration
             toggled = 1 if int(new_state) == 0 else 0
             toggle_switch.apply_async((key, toggled), eta=eta)
             self.__schedule = None
@@ -88,7 +91,7 @@ class SwitchService:
                                   self.config['ethernet']['address'],
                                   params['address'])
         elif 'raspberry' == params['type']:
-            return RaspberrySwitch(params)
+            return RaspberrySwitch(params['pin'], params['seconds'])
         else:
             raise RuntimeError('Unknown switch driver')
 
@@ -108,14 +111,14 @@ class AbstractSwitch:
 
 
 class EthernetSwitch(AbstractSwitch):
-    def __init__(self, id, url, address):
-        self.id = id
+    def __init__(self, port_id, url, address):
+        self.port_id = port_id
         self.address = address
         self.url = 'http://' + url
 
     def get_state(self):
-        statusXml = urllib2.urlopen(self.url + '/status.xml').read()
-        xml = parseString(statusXml)
+        status_xml = urllib2.urlopen(self.url + '/status.xml').read()
+        xml = parseString(status_xml)
         node_name = 'led' + str(self.address)
 
         return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
@@ -125,9 +128,23 @@ class EthernetSwitch(AbstractSwitch):
         if int(current_state) != int(new_state):
             address = self.url + '/leds.cgi?led=' + str(self.address)
             urllib2.urlopen(address).read()
-            self.notify_state_change(self.id, new_state)
+            self.notify_state_change(self.port_id, new_state)
 
 
 class RaspberrySwitch(AbstractSwitch):
+    def __init__(self, pin, seconds):
+        self.pin = pin
+        self.seconds = seconds
+        GPIO.setup(self.pin, GPIO.OUT)
+        GPIO.setmode(GPIO.BCM)
+
     def get_state(self):
-        return -1
+        return GPIO.input(self.pin)
+
+    def set_state(self, new_state):
+        if int(new_state) != self.get_state():
+            GPIO.output(self.pin, int(new_state))
+            self.notify_state_change(self.pin, int(new_state))
+
+    def get_duration(self):
+        return timedelta(seconds=int(self.seconds))

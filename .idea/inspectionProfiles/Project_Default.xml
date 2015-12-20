@@ -14,6 +14,7 @@
       <option name="ignoredIdentifiers">
         <list>
           <option value="pihome.crontab" />
+          <option value="switch.RPi" />
         </list>
       </option>
     </inspection_tool>
