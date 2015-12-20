@@ -30,12 +30,14 @@ switch:
             type: ethernet
             address: 5
         blind_dinning_up:
-            pin: 14
             name : 'Roleta jadalnia góra'
+            type: raspberry
+            pin: 14
             time: 29
         blind_dinning_down:
-            pin: 15
             name : 'Roleta jadalnia dół'
+            type: raspberry
+            pin: 15
             time: 29
 sensor:
     w1thermometer:
