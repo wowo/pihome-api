@@ -7,6 +7,7 @@ import json
 import memcache
 import os
 import pika
+import subprocess
 import urllib2
 import yaml
 
@@ -134,30 +135,15 @@ class RaspberrySwitch(AbstractSwitch):
     def __init__(self, pin, seconds):
         self.pin = pin
         self.seconds = seconds
-        if not os.path.isdir('/sys/class/gpio/gpio' + str(self.pin)):
-            export = open('/sys/class/gpio/export', 'w')
-            export.write(str(self.pin))
-            export.close()
-            direction = open('/sys/class/gpio/gpio%s/direction' % str(self.pin), 'w')
-            direction.write('out')
-            direction.close()
-
-    def __del__(self):
-        export = open('/sys/class/gpio/unexport', 'w')
-        export.write(str(self.pin))
-        export.close()
+        os.system('gpio mode %s out' % str(self.pin))
 
     def get_state(self):
-        value = open('/sys/class/gpio/gpio%s/value' % str(self.pin), 'r')
-        state = value.read().strip()
-        value.close()
+        state = subprocess.check_output(['gpio', 'read', str(self.pin)]).strip()
         return int(state)
 
     def set_state(self, new_state):
         if int(new_state) != self.get_state():
-            value = open('/sys/class/gpio/gpio%s/value' % str(self.pin), 'w')
-            value.write(str(new_state))
-            value.close()
+            os.system('gpio write %s %s' % (str(self.pin), str(new_state), ))
             self.notify_state_change(self.pin, int(new_state))
 
     def get_duration(self, new_state):
