@@ -90,8 +90,10 @@ class SwitchService:
             return EthernetSwitch(params['id'],
                                   self.config['ethernet']['address'],
                                   params['address'])
-        elif 'raspberry' == params['type']:
-            return RaspberrySwitch(params['pin'], params['seconds'])
+        elif 'two_way' == params['type']:
+            return TwoWaySwitch(
+                RaspberrySwitch(params['up_pin'], params['seconds']),
+                RaspberrySwitch(params['down_pin'], params['seconds']))
         else:
             raise RuntimeError('Unknown switch driver')
 
@@ -143,8 +145,32 @@ class RaspberrySwitch(AbstractSwitch):
 
     def set_state(self, new_state):
         if int(new_state) != self.get_state():
-            os.system('gpio write %s %s' % (str(self.pin), str(new_state), ))
+            os.system('gpio write %s %s' % (str(self.pin), str(new_state),))
             self.notify_state_change(self.pin, int(new_state))
 
     def get_duration(self, new_state):
         return timedelta(seconds=int(self.seconds)) if int(new_state) == 1 else None
+
+
+class TwoWaySwitch:
+    def __init__(self, up, down):
+        self.up = up  # type: RaspberrySwitch
+        self.down = down  # type: RaspberrySwitch
+
+    def get_state(self):
+        state = 'stop'
+        if self.up.get_state() == 1:
+            state = 'up'
+        elif self.down.get_state() == 1:
+            state = 'down'
+
+        return state
+
+    def set_state(self, new_state):
+        if 'stop' == new_state:
+            self.up.set_state(0)
+            self.down.set_state(0)
+        elif 'up' == new_state:
+            self.up.set_state(1)
+        elif 'down' == new_state:
+            self.down.set_state(1)
