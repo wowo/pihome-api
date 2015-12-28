@@ -99,6 +99,9 @@ class SwitchService:
 
 
 class AbstractSwitch:
+    def __init__(self):
+        pass
+
     def notify_state_change(self, sensor_key, new_state):
         payload = {'key': sensor_key,
                    'state': new_state,
@@ -114,6 +117,7 @@ class AbstractSwitch:
 
 class EthernetSwitch(AbstractSwitch):
     def __init__(self, port_id, url, address):
+        AbstractSwitch.__init__(self)
         self.port_id = port_id
         self.address = address
         self.url = 'http://' + url
@@ -135,6 +139,7 @@ class EthernetSwitch(AbstractSwitch):
 
 class RaspberrySwitch(AbstractSwitch):
     def __init__(self, pin, seconds):
+        AbstractSwitch.__init__(self)
         self.pin = pin
         self.seconds = seconds
         os.system('gpio mode %s out' % str(self.pin))
