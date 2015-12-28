@@ -68,7 +68,8 @@ class SwitchService:
                     'name': device['name'],
                     'state': self.get_state(device),
                     'when': str(datetime.now()),
-                    'scheduled': scheduled}
+                    'scheduled': scheduled,
+                    'type': device['type']}
             self.cache.set(key, info)
 
         return info
