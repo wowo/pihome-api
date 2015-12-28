@@ -176,6 +176,8 @@ class TwoWaySwitch:
             self.up.set_state(0)
             self.down.set_state(0)
         elif 'up' == new_state:
+            self.down.set_state(0)
             self.up.set_state(1)
         elif 'down' == new_state:
+            self.up.set_state(0)
             self.down.set_state(1)
