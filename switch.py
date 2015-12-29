@@ -93,7 +93,7 @@ class SwitchService:
                                   params['address'])
         elif 'two_way' == params['type']:
             return TwoWaySwitch(
-                params['name'],
+                params['id'],
                 RaspberrySwitch(params['up_pin']),
                 RaspberrySwitch(params['down_pin']),
                 params['seconds'])
@@ -167,9 +167,9 @@ class RaspberrySwitch(AbstractSwitch):
 
 
 class TwoWaySwitch(AbstractSwitch):
-    def __init__(self, name, up, down, seconds):
+    def __init__(self, switch_id, up, down, seconds):
         AbstractSwitch.__init__(self)
-        self.name = name  # type: str
+        self.switch_id = switch_id # type: str
         self.up = up  # type: RaspberrySwitch
         self.down = down  # type: RaspberrySwitch
         self.seconds = seconds # type: int
@@ -193,7 +193,7 @@ class TwoWaySwitch(AbstractSwitch):
         elif 'down' == new_state:
             self.up.set_state(0)
             self.down.set_state(1)
-        self.notify_state_change(self.name, new_state)
+        self.notify_state_change(self.switch_id, new_state)
 
     def get_opposite_state(self, new_state):
         return 'stop'

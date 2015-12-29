@@ -30,11 +30,19 @@ switch:
             type: ethernet
             address: 5
         blind_dinning:
-            name : 'Roleta jadalnia'
+            id: blind_dinning
+            name: 'Roleta jadalnia'
             type: two_way
             up_pin: 1
             down_pin: 16
-            seconds: 29
+            seconds: 22
+        blind_terrace:
+            id: blind_terrace
+            name: 'Roleta taras'
+            type: two_way
+            up_pin: 4
+            down_pin: 5
+            seconds: 30
 sensor:
     w1thermometer:
         base_path: '/sys/bus/w1/devices/'
