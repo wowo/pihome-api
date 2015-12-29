@@ -39,12 +39,10 @@ class SwitchService:
         self.cache.delete(str(key))
 
         duration = driver.get_duration(new_state) if 'get_duration' in dir(driver) else duration
-
         if duration is not None:
             from tasks import toggle_switch
             eta = datetime.utcnow() + duration
-            toggled = 1 if int(new_state) == 0 else 0
-            toggle_switch.apply_async((key, toggled), eta=eta)
+            toggle_switch.apply_async((key, driver.get_opposite_state(new_state)), eta=eta)
             self.__schedule = None
             self.__revoked = None
 
@@ -60,8 +58,7 @@ class SwitchService:
             for entry in self.__get_schedule():
                 args = eval(entry['request']['args'])
                 if args[0] == key and entry['request']['id'] not in revoked:
-                    scheduled = {'when': entry['eta'],
-                                 'state': args[1]}
+                    scheduled = {'when': entry['eta'], 'state': args[1]}
                     break
 
             info = {'key': key,
@@ -87,14 +84,19 @@ class SwitchService:
         return self.__revoked
 
     def __get_switch_driver(self, params):
+        """
+        :rtype : AbstractSwitch
+        """
         if 'ethernet' == params['type']:
             return EthernetSwitch(params['id'],
                                   self.config['ethernet']['address'],
                                   params['address'])
         elif 'two_way' == params['type']:
             return TwoWaySwitch(
-                RaspberrySwitch(params['up_pin'], params['seconds']),
-                RaspberrySwitch(params['down_pin'], params['seconds']))
+                params['name'],
+                RaspberrySwitch(params['up_pin']),
+                RaspberrySwitch(params['down_pin']),
+                params['seconds'])
         else:
             raise RuntimeError('Unknown switch driver')
 
@@ -103,7 +105,14 @@ class AbstractSwitch:
     def __init__(self):
         pass
 
-    def notify_state_change(self, sensor_key, new_state):
+    def set_state(self, new_state):
+        raise NotImplementedError("Please implement this method")
+
+    def get_state(self):
+        raise NotImplementedError("Please implement this method")
+
+    @staticmethod
+    def notify_state_change(sensor_key, new_state):
         payload = {'key': sensor_key,
                    'state': new_state,
                    'date': str(datetime.now())}
@@ -114,6 +123,9 @@ class AbstractSwitch:
                               routing_key='switch_state',
                               properties=pika.BasicProperties(delivery_mode=2),
                               body=json.dumps(payload))
+
+    def get_opposite_state(self, new_state):
+        return 1 if int(new_state) == 0 else 0
 
 
 class EthernetSwitch(AbstractSwitch):
@@ -139,10 +151,9 @@ class EthernetSwitch(AbstractSwitch):
 
 
 class RaspberrySwitch(AbstractSwitch):
-    def __init__(self, pin, seconds):
+    def __init__(self, pin):
         AbstractSwitch.__init__(self)
         self.pin = pin
-        self.seconds = seconds
         os.system('gpio mode %s out' % str(self.pin))
 
     def get_state(self):
@@ -151,17 +162,17 @@ class RaspberrySwitch(AbstractSwitch):
 
     def set_state(self, new_state):
         if int(new_state) != self.get_state():
-            os.system('gpio write %s %s' % (str(self.pin), str(new_state),))
+            os.system('gpio write %s %s' % (str(self.pin), str(new_state)))
             self.notify_state_change(self.pin, int(new_state))
 
-    def get_duration(self, new_state):
-        return timedelta(seconds=int(self.seconds)) if int(new_state) == 1 else None
 
-
-class TwoWaySwitch:
-    def __init__(self, up, down):
+class TwoWaySwitch(AbstractSwitch):
+    def __init__(self, name, up, down, seconds):
+        AbstractSwitch.__init__(self)
+        self.name = name  # type: str
         self.up = up  # type: RaspberrySwitch
         self.down = down  # type: RaspberrySwitch
+        self.seconds = seconds # type: int
 
     def get_state(self):
         state = 'stop'
@@ -182,3 +193,10 @@ class TwoWaySwitch:
         elif 'down' == new_state:
             self.up.set_state(0)
             self.down.set_state(1)
+        self.notify_state_change(self.name, new_state)
+
+    def get_opposite_state(self, new_state):
+        return 'stop'
+
+    def get_duration(self, new_state):
+        return timedelta(seconds=int(self.seconds)) if 'stop' != new_state else None
