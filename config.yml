@@ -51,12 +51,12 @@ sensor:
         #    name: 'Zewnątrz zachód'
         #    type: w1thermometer
         #    address: '28-000002726a7c'
-        outdoor_north:
-            name: 'Zewnątrz północ'
+        outdoor_east:
+            name: 'Zewnątrz wschód'
             type: w1thermometer
             address: '28-00000613e0ac'
-        office:
-            name: 'Gabinet'
+        basement:
+            name: 'Piwnica'
             type: w1thermometer
             address: '28-000004765573'
 storing:
