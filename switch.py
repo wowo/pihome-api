@@ -54,12 +54,13 @@ class SwitchService:
             device = self.config['devices'][key]
 
             scheduled = None
-            revoked = self.__get_revoked()
-            for entry in self.__get_schedule():
-                args = eval(entry['request']['args'])
-                if args[0] == key and entry['request']['id'] not in revoked:
-                    scheduled = {'when': entry['eta'], 'state': args[1]}
-                    break
+            if self.__get_switch_driver(device).allow_show_schedule():
+                revoked = self.__get_revoked()
+                for entry in self.__get_schedule():
+                    args = eval(entry['request']['args'])
+                    if args[0] == key and entry['request']['id'] not in revoked:
+                        scheduled = {'when': entry['eta'], 'state': args[1]}
+                        break
 
             info = {'key': key,
                     'name': device['name'],
@@ -127,6 +128,8 @@ class AbstractSwitch:
     def get_opposite_state(self, new_state):
         return 1 if int(new_state) == 0 else 0
 
+    def allow_show_schedule(self):
+        return True
 
 class EthernetSwitch(AbstractSwitch):
     def __init__(self, port_id, url, address):
@@ -200,3 +203,6 @@ class TwoWaySwitch(AbstractSwitch):
 
     def get_duration(self, new_state):
         return timedelta(seconds=int(self.seconds)) if 'stop' != new_state else None
+
+    def allow_show_schedule(self):
+        return False
