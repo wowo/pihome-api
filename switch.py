@@ -131,6 +131,7 @@ class AbstractSwitch:
     def allow_show_schedule(self):
         return True
 
+
 class EthernetSwitch(AbstractSwitch):
     def __init__(self, port_id, url, address):
         AbstractSwitch.__init__(self)
@@ -164,18 +165,17 @@ class RaspberrySwitch(AbstractSwitch):
         return int(state)
 
     def set_state(self, new_state):
-        if int(new_state) != self.get_state():
+        if new_state != self.get_state():
             os.system('gpio write %s %s' % (str(self.pin), str(new_state)))
-            self.notify_state_change(self.pin, int(new_state))
 
 
 class TwoWaySwitch(AbstractSwitch):
     def __init__(self, switch_id, up, down, seconds):
         AbstractSwitch.__init__(self)
-        self.switch_id = switch_id # type: str
+        self.switch_id = switch_id  # type: str
         self.up = up  # type: RaspberrySwitch
         self.down = down  # type: RaspberrySwitch
-        self.seconds = seconds # type: int
+        self.seconds = seconds  # type: int
 
     def get_state(self):
         state = 'stop'
@@ -193,10 +193,11 @@ class TwoWaySwitch(AbstractSwitch):
         elif 'up' == new_state:
             self.down.set_state(0)
             self.up.set_state(1)
+            self.notify_state_change(self.switch_id, new_state)
         elif 'down' == new_state:
             self.up.set_state(0)
             self.down.set_state(1)
-        self.notify_state_change(self.switch_id, new_state)
+            self.notify_state_change(self.switch_id, new_state)
 
     def get_opposite_state(self, new_state):
         return 'stop'

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from pymongo import MongoClient
 import json
 import logging
@@ -40,8 +40,6 @@ class StoringService:
         return events
 
     def get_reading_list(self, since, until=None):
-        documents = []
-
         criteria = {'date': {'$gte': since}}
         if until:
             criteria['date']['$lte'] = until
