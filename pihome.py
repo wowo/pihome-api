@@ -145,7 +145,7 @@ def add_cors(resp):
                                'Authorization')
     resp.headers['Access-Control-Allow-Origin'] = origin
     resp.headers['Access-Control-Allow-Credentials'] = 'true'
-    resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET, PATCH'
+    resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET, PATCH, DELETE'
     resp.headers['Access-Control-Allow-Headers'] = auth
 
     return resp
