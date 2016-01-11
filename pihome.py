@@ -40,9 +40,10 @@ def switch_list():
 def switch_toggle(key):
     switch = SwitchService()
     input_data = json.loads(request.data)
+    duration = timedelta(minutes=int(input_data['duration'])) if 'duration' in input_data else None
     data = switch.toggle(key,
                          input_data['state'],
-                         timedelta(minutes=int(input_data['duration'])) if 'duration' in input_data else None)
+                         duration)
 
     return jsonify(data)
 
