@@ -10,6 +10,7 @@ import sys
 import yaml
 import traceback
 
+
 def get_logger():
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
@@ -21,6 +22,7 @@ def get_logger():
     root.addHandler(ch)
     return root
 
+
 def get_db():
     path = file(os.path.dirname(os.path.realpath(__file__)) + '/../../config.yml')
     config = yaml.load(path)['storing']['mongo']
@@ -29,15 +31,18 @@ def get_db():
     db.authenticate(config['user'], config['pass'])
     return db
 
+
 def ensure_dirs(dirs):
     if not os.path.exists(dirs):
         logger.debug('Dirs %s do not exist, will create it' % dirs)
         os.makedirs(dirs)
 
+
 def get_file(filename):
     if filename not in file_handlers:
         file_handlers[filename] = open(filename, 'a+')
     return file_handlers[filename]
+
 
 if len(sys.argv) == 1:
     raise Exception('Please specify output path as first argument')
@@ -64,7 +69,7 @@ for document in iterator:
         except KeyError:
             logger.warning('Missing temerature key in %s, skipping' % document['sensors'][uid])
         except:
-            logger.critical('Unexpected error: ' +  sys.exc_info()[0])
+            logger.critical('Unexpected error: ' + sys.exc_info()[0])
 
 for filename in file_handlers:
     file_handlers[filename].close()

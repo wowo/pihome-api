@@ -43,6 +43,11 @@ switch:
             up_pin: 4
             down_pin: 5
             seconds: 30
+        gate_main:
+            id: gate_main
+            name: 'Brama główna'
+            type: click
+            pin: 6
 sensor:
     w1thermometer:
         base_path: '/sys/bus/w1/devices/'

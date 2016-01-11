@@ -8,6 +8,7 @@ import memcache
 import os
 import pika
 import subprocess
+import time
 import urllib2
 import yaml
 
@@ -98,6 +99,11 @@ class SwitchService:
                 RaspberrySwitch(params['up_pin']),
                 RaspberrySwitch(params['down_pin']),
                 params['seconds'])
+        elif 'click' == params['type']:
+            return ClickSwitch(
+                params['id'],
+                params['pin'],
+            )
         else:
             raise RuntimeError('Unknown switch driver')
 
@@ -207,3 +213,20 @@ class TwoWaySwitch(AbstractSwitch):
 
     def allow_show_schedule(self):
         return False
+
+
+class ClickSwitch(AbstractSwitch):
+    def __init__(self, switch_id, pin):
+        AbstractSwitch.__init__(self)
+        self.switch_id = switch_id  # type: str
+        self.pin = pin  # type: int
+        os.system('gpio mode %s out' % str(self.pin))
+
+    def get_state(self):
+        return 0
+
+    def set_state(self, new_state):
+        os.system('gpio write %s 1' % (str(self.pin)))
+        time.sleep(0.5)
+        os.system('gpio write %s 0' % (str(self.pin)))
+        self.notify_state_change(self.switch_id, 'click')
