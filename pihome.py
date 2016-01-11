@@ -99,19 +99,26 @@ def cron_list():
 @app.route('/cron', methods=['POST'])
 def cron_create():
     input_data = json.loads(request.data)
-    new_id = str(uuid.uuid4())
-    command = 'curl localhost/api/switch/%s -XPATCH -d \'{"state": "%d", "duration": "%d"}\'  -H \'Content-Type: application/json\'' % (
-        input_data['switch'], input_data['state'], int(input_data['duration']))
+    payload = {
+        'state': input_data['state']
+    }
+    if 'duration' in input_data:
+        payload['duration'] = int(input_data['duration'])
+
+    command = 'curl localhost/api/switch/%s -XPATCH -d \'%s\' -H \'Content-Type: application/json\''\
+              % (input_data['switch'], json.dumps(payload))
     cron = CronTab(user=True)
     job = cron.new(command=command)
     job.setall(input_data["schedule"])
     comment = {
-        'id': new_id,
+        'id': str(uuid.uuid4()),
         'switch': input_data['switch'],
         'state': input_data['state'],
-        'duration': input_data['duration'] if 'duration' in input_data else 0,
         'schedule': job.slices.render(),
     }
+    if 'duration' in input_data:
+        comment['duration'] = int(input_data['duration'])
+
     job.comment = 'pihome-api ' + json.dumps(comment)
     cron.write()
 
