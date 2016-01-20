@@ -48,6 +48,11 @@ switch:
             name: 'Brama główna'
             type: click
             pin: 6
+        gate_garage:
+            id: gate_garage
+            name: 'Brama garaż'
+            type: click
+            pin: 11
 sensor:
     w1thermometer:
         base_path: '/sys/bus/w1/devices/'
@@ -59,11 +64,23 @@ sensor:
         outdoor_east:
             name: 'Zewnątrz wschód'
             type: w1thermometer
-            address: '28-00000613e0ac'
+            address: '28-000002726a7c'
         basement:
             name: 'Piwnica'
             type: w1thermometer
             address: '28-000004765573'
+        entrance:
+            name: 'Wiatrołap'
+            type: w1thermometer
+            address: '28-00000594a06c'
+        kitchen:
+            name: 'Kuchnia'
+            type: w1thermometer
+            address: '28-000005caf175'
+        garage:
+            name: 'Garaż'
+            type: w1thermometer
+            address: '28-000006142545'
 storing:
     mongo:
         host: 'linus.mongohq.com'

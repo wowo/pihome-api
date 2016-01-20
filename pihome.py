@@ -91,6 +91,15 @@ def cron_list():
         if job.comment.find('pihome-api') != -1:
             task_data = json.loads(job.comment.replace('pihome-api ', ''))
             task_data['name'] = config['devices'][task_data['switch']]['name']
+            if '@hourly' == task_data['schedule']:
+                task_data['schedule'] = '0 * * * *'
+            elif '@daily' == task_data['schedule']:
+                task_data['schedule'] = '0 0 * * *'
+            elif '@weekly' == task_data['schedule']:
+                task_data['schedule'] = '0 0 * * 0'
+            elif '@monthly' == task_data['schedule']:
+                task_data['schedule'] = '0 0 1 * *'
+
             result.append(task_data)
 
     return hal_response(result)
@@ -99,17 +108,33 @@ def cron_list():
 @app.route('/cron', methods=['POST'])
 def cron_create():
     input_data = json.loads(request.data)
-    payload = {
-        'state': input_data['state']
-    }
-    if 'duration' in input_data:
-        payload['duration'] = int(input_data['duration'])
 
-    command = 'curl localhost/api/switch/%s -XPATCH -d \'%s\' -H \'Content-Type: application/json\''\
-              % (input_data['switch'], json.dumps(payload))
     cron = CronTab(user=True)
-    job = cron.new(command=command)
+    job = cron.new(command=get_cron_command(input_data))
     job.setall(input_data["schedule"])
+    job.comment = 'pihome-api ' + get_cron_comment(input_data, job)
+    cron.write()
+
+    logging.warning(job.comment)
+
+    return get_cron_comment(input_data, job)
+
+@app.route('/cron/<cron_id>', methods=['PUT'])
+def cron_edit(cron_id):
+    input_data = json.loads(request.data)
+
+    cron = CronTab(user=True)
+    for job in cron:
+        if job.comment.find(cron_id) != -1:
+            job.setall(input_data["schedule"])
+            job.command = get_cron_command(input_data)
+            job.comment = 'pihome-api ' + get_cron_comment(input_data, job)
+            cron.write()
+
+            return get_cron_comment(input_data, job)
+
+
+def get_cron_comment(input_data, job):
     comment = {
         'id': str(uuid.uuid4()),
         'switch': input_data['switch'],
@@ -119,10 +144,18 @@ def cron_create():
     if 'duration' in input_data:
         comment['duration'] = int(input_data['duration'])
 
-    job.comment = 'pihome-api ' + json.dumps(comment)
-    cron.write()
+    return json.dumps(comment)
+    
 
-    return jsonify(comment)
+def get_cron_command(input_data):
+    payload = {
+        'state': input_data['state']
+    }
+    if 'duration' in input_data:
+        payload['duration'] = int(input_data['duration'])
+
+    return 'curl localhost/api/switch/%s -XPATCH -d \'%s\' -H \'Content-Type: application/json\''\
+              % (input_data['switch'], json.dumps(payload))
 
 
 @app.route('/cron/<cron_id>', methods=['DELETE'])
@@ -145,7 +178,7 @@ def add_cors(resp):
                                'Authorization')
     resp.headers['Access-Control-Allow-Origin'] = origin
     resp.headers['Access-Control-Allow-Credentials'] = 'true'
-    resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET, PATCH, DELETE'
+    resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET, PATCH, PUT, DELETE'
     resp.headers['Access-Control-Allow-Headers'] = auth
 
     return resp
