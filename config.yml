@@ -43,6 +43,13 @@ switch:
             up_pin: 4
             down_pin: 5
             seconds: 30
+        blind_ground_floor:
+            id: blind_ground_floor
+            name: 'Rolety parter'
+            type: two_way
+            aggregate:
+                - blind_terrace
+                - blind_dinning
         gate_main:
             id: gate_main
             name: 'Brama główna'
@@ -88,4 +95,3 @@ storing:
         user: 'pithermo'
         pass: 'pi2013'
         collection: 'pithermo'
-
