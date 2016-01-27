@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from celery.task.control import inspect
+from celery.task.control import inspect, revoke
 from datetime import datetime, timedelta
 from xml.dom.minidom import parseString
 import json
@@ -37,6 +37,7 @@ class SwitchService:
         device = self.config['devices'][key]
         driver = self.__get_switch_driver(device)
         driver.set_state(new_state)
+        self.__revoke_scheduled(str(key))
         self.cache.delete(str(key))
 
         duration = driver.get_duration(new_state) if 'get_duration' in dir(driver) else duration
@@ -48,6 +49,15 @@ class SwitchService:
             self.__revoked = None
 
         return self.__get_switch(str(key))
+
+    def __revoke_scheduled(self, key):
+        revoked = self.__get_revoked()
+        for entry in self.__get_schedule():
+            args = eval(entry['request']['args'])
+            if args[0] == key and entry['request']['id'] not in revoked:
+                revoke(entry['request']['id'], Terminate=True)
+                self.__schedule = None
+                self.__revoked = None
 
     def __get_switch(self, key):
         info = self.cache.get(key)
