@@ -1,6 +1,6 @@
 switch:
     ethernet:
-        address: 192.168.254.105
+        address: 192.168.254.101
     raspberry:
         path: '/sys/class/gpio/'
     devices:
