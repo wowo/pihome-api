@@ -103,7 +103,7 @@ class SwitchService:
             switches = []
             for switch in params['aggregate']:
                 switches.append(self.__get_switch_driver(self.config['devices'][switch]))
-            return AggregateSwitch(params['id'], switches)
+            return AggregateSwitch(switches)
         if 'ethernet' == params['type']:
             return EthernetSwitch(params['id'],
                                   self.config['ethernet']['address'],
