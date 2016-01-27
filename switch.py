@@ -89,6 +89,11 @@ class SwitchService:
         """
         :rtype : AbstractSwitch
         """
+        if 'aggregate' in params:
+            switches = []
+            for switch in params['aggregate']:
+                switches.append(self.__get_switch_driver(self.config['devices'][switch]))
+            return AggregateSwitch(params['id'], switches)
         if 'ethernet' == params['type']:
             return EthernetSwitch(params['id'],
                                   self.config['ethernet']['address'],
@@ -230,3 +235,16 @@ class ClickSwitch(AbstractSwitch):
         time.sleep(0.5)
         os.system('gpio write %s 0' % (str(self.pin)))
         self.notify_state_change(self.switch_id, 'click')
+
+
+class AggregateSwitch(AbstractSwitch):
+    def __init__(self, switches):
+        AbstractSwitch.__init__(self)
+        self.switches = switches  # type: list
+
+    def get_state(self):
+        return self.switches[-1].get_state()
+
+    def set_state(self, new_state):
+        for switch in self.switches:
+            switch.set_state(new_state)
