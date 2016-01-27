@@ -45,7 +45,7 @@ switch:
             seconds: 30
         blind_ground_floor:
             id: blind_ground_floor
-            name: 'Rolety parter'
+            name: 'Roleta parter'
             type: two_way
             aggregate:
                 - blind_terrace
