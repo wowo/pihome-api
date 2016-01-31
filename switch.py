@@ -258,3 +258,13 @@ class AggregateSwitch(AbstractSwitch):
     def set_state(self, new_state):
         for switch in self.switches:
             switch.set_state(new_state)
+
+    def get_duration(self, new_state):
+        durations = []
+        for switch in self.switches:
+            durations.append(switch.get_duration(new_state) if 'get_duration' in dir(switch) else None)
+
+        return max(durations)
+
+    def get_opposite_state(self, new_state):
+        return 'stop'
