@@ -26,6 +26,7 @@ class SensorService:
         device = self.config['devices'][key]
 
         return {'key': key,
+                'address': device['address'],
                 'name': device['name'],
                 'value': self.get_value(device),
                 'when': str(datetime.now())}

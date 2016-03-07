@@ -195,3 +195,7 @@ if not app.debug:
 if __name__ != 'pihome-api':  # wsgi
     if __name__ == "__main__" and len(sys.argv) == 1:
         app.run(host='0.0.0.0', port=8999, debug=True)
+    elif len(sys.argv) > 1 and sys.argv[1] == '--store-sensors':
+        print('> Store sensors state ' + datetime.now().strftime('%Y-%m-%d %H:%M'))
+        service = StoringService()
+        service.store_sensors_state()

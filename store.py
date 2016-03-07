@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+from sensor import SensorService
 from datetime import datetime
 from pymongo import MongoClient
 import json
@@ -80,6 +81,28 @@ class StoringService:
                              'switch_state',
                              body,
                              properties=properties)
+
+    def store_sensors_state(self):
+        try:
+            data = {}
+            sensor = SensorService()
+            sensors = sensor.get_list()
+            for key in sensors:
+                print('> store %.2f for sensor %s (%s)' % (sensors[key]['value'], sensors[key]['name'], sensors[key]['key']))
+                data[sensors[key]['address']] = {
+                    'temperature':  sensors[key]['value'],
+                    'id': key,
+                    'name': sensors[key]['name']
+                }
+
+            self.__get_db().temperatures.insert({
+                'date': datetime.now(),
+                'sensors': data
+            })
+            self.conn.close()
+        except Exception as e:
+            print "\t%s occured with: %s" % (type(e), e)
+            traceback.print_exc()
 
     def consume_switch_state(self):
         parameters = pika.ConnectionParameters('localhost')
