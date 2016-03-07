@@ -1,6 +1,6 @@
 switch:
     ethernet:
-        address: 192.168.254.101
+        address: 192.168.254.100
     raspberry:
         path: '/sys/class/gpio/'
     devices:
@@ -69,7 +69,7 @@ sensor:
         #    type: w1thermometer
         #    address: '28-000002726a7c'
         outdoor_east:
-            name: 'Zewnątrz wschód'
+            name: 'Zewnątrz'
             type: w1thermometer
             address: '28-000002726a7c'
         basement:
