@@ -61,11 +61,14 @@ switch:
             type: click_sequence
             sequence:
                 - switch: gate_main
+                  pin: 6
                   execute_after: 0
                 - switch: gate_main
-                  execute_after: 8
+                  pin: 6
+                  execute_after: 4
                 - switch: gate_main
-                  execute_after: 120
+                  pin: 6
+                  execute_after: 30
         gate_garage:
             id: gate_garage
             name: 'Brama garaż'

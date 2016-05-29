@@ -300,8 +300,15 @@ class ClickSequenceSwitch(AbstractSwitch):
     def set_state(self, new_state):
         from tasks import toggle_switch
         for operation in self.sequence:
-            eta = datetime.utcnow() + timedelta(seconds=int(operation['execute_after']))
-            toggle_switch.apply_async((operation['switch'], 1), eta=eta)
+            if 0 == operation['execute_after']:
+                switch = ClickSwitch(
+                    operation['switch_id'],
+                    operation['pin'],
+                )
+                switch.set_state(new_state)
+            else:
+                eta = datetime.utcnow() + timedelta(seconds=int(operation['execute_after']))
+                toggle_switch.apply_async((operation['switch'], 1), eta=eta)
 
     def allow_show_schedule(self):
         return False
