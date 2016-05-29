@@ -57,7 +57,7 @@ switch:
             pin: 6
         gate_main_door_mode:
             id: gate_main_door_mode
-            name: 'Furtka'
+            name: 'Brama furtka'
             type: click_sequence
             sequence:
                 - switch: gate_main
@@ -65,10 +65,10 @@ switch:
                   execute_after: 0
                 - switch: gate_main
                   pin: 6
-                  execute_after: 4
+                  execute_after: 2
                 - switch: gate_main
                   pin: 6
-                  execute_after: 30
+                  execute_after: 120
         gate_garage:
             id: gate_garage
             name: 'Brama garaż'
