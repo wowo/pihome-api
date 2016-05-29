@@ -45,7 +45,7 @@ class SwitchService:
         if duration is not None:
             from tasks import toggle_switch
             eta = datetime.utcnow() + duration
-            toggle_switch.apply_async((key, driver.get_opposite_state(new_state)), eta=eta)
+            toggle_switch.apply_async((key, driver.get_opposite_state(new_state), True), eta=eta)
             self.__schedule = None
             self.__revoked = None
 
@@ -55,7 +55,7 @@ class SwitchService:
         revoked = self.__get_revoked()
         for entry in self.__get_schedule():
             args = eval(entry['request']['args'])
-            if args[0] == key and entry['request']['id'] not in revoked:
+            if args[0] == key and not args[2] and entry['request']['id'] not in revoked:
                 revoke(entry['request']['id'], Terminate=True)
                 self.__schedule = None
                 self.__revoked = None
@@ -308,7 +308,7 @@ class ClickSequenceSwitch(AbstractSwitch):
                 switch.set_state(new_state)
             else:
                 eta = datetime.utcnow() + timedelta(seconds=int(operation['execute_after']))
-                toggle_switch.apply_async((operation['switch'], 1), eta=eta)
+                toggle_switch.apply_async((operation['switch'], 1, False), eta=eta)
 
     def allow_show_schedule(self):
         return False

@@ -9,7 +9,7 @@ celery = Celery('tasks', broker='amqp://localhost//')
 
 
 @celery.task
-def toggle_switch(key, new_state):
+def toggle_switch(key, new_state, revoke_other_scheduled):
     url = 'http://localhost/api/switch/' + key
     data = json.dumps({'state': new_state})
     print 'Toggle switch task, url: %s, data : %s' % (url, data)
