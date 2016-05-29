@@ -2,6 +2,7 @@
 
 from celery.task.control import inspect, revoke
 from datetime import datetime, timedelta
+import socket
 from xml.dom.minidom import parseString
 import json
 import memcache
@@ -85,13 +86,19 @@ class SwitchService:
 
     def __get_schedule(self):
         if self.__schedule is None:
-            self.__schedule = inspect().scheduled()['celery@raspberrypi']
+            try:
+                self.__schedule = inspect().scheduled()['celery@raspberrypi']
+            except socket.error:
+                self.__schedule = []
 
         return self.__schedule
 
     def __get_revoked(self):
         if self.__revoked is None:
-            self.__revoked = inspect().revoked()['celery@raspberrypi']
+            try:
+                self.__revoked = inspect().revoked()['celery@raspberrypi']
+            except socket.error:
+                self.__revoked = []
 
         return self.__revoked
 
@@ -118,6 +125,11 @@ class SwitchService:
             return ClickSwitch(
                 params['id'],
                 params['pin'],
+            )
+        elif 'click_sequence' == params['type']:
+            return ClickSequenceSwitch(
+                params['id'],
+                params['sequence'],
             )
         else:
             raise RuntimeError('Unknown switch driver')
@@ -185,8 +197,11 @@ class RaspberrySwitch(AbstractSwitch):
         os.system('gpio mode %s out' % str(self.pin))
 
     def get_state(self):
-        state = subprocess.check_output(['gpio', 'read', str(self.pin)]).strip()
-        return int(state)
+        try:
+            state = subprocess.check_output(['gpio', 'read', str(self.pin)]).strip()
+            return int(state)
+        except subprocess.CalledProcessError:
+            return None
 
     def set_state(self, new_state):
         if new_state != self.get_state():
@@ -272,18 +287,24 @@ class AggregateSwitch(AbstractSwitch):
     def get_opposite_state(self, new_state):
         return 'stop'
 
-class SequenceSwitch(AbstractSwitch):
-    def __init__(self, sequence):
+
+class ClickSequenceSwitch(AbstractSwitch):
+    def __init__(self, switch_id, sequence):
         AbstractSwitch.__init__(self)
+        self.switch_id = switch_id  # type: str
         self.sequence = sequence  # type: array
-        self.pin = pin  # type: int
-        os.system('gpio mode %s out' % str(self.pin))
 
     def get_state(self):
         return 0
 
     def set_state(self, new_state):
-        os.system('gpio write %s 1' % (str(self.pin)))
-        time.sleep(0.5)
-        os.system('gpio write %s 0' % (str(self.pin)))
-        self.notify_state_change(self.switch_id, 'click')
+        from tasks import toggle_switch
+        for operation in self.sequence:
+            eta = datetime.utcnow() + timedelta(seconds=int(operation['execute_after']))
+            toggle_switch.apply_async((operation['switch'], 1), eta=eta)
+
+    def allow_show_schedule(self):
+        return False
+
+    def get_opposite_state(self, new_state):
+        return 0

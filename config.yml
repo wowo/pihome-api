@@ -58,7 +58,7 @@ switch:
         gate_main_door_mode:
             id: gate_main_door_mode
             name: 'Furtka'
-            type: sequence
+            type: click_sequence
             sequence:
                 - switch: gate_main
                   execute_after: 0
