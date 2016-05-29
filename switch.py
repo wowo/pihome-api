@@ -55,7 +55,7 @@ class SwitchService:
         revoked = self.__get_revoked()
         for entry in self.__get_schedule():
             args = eval(entry['request']['args'])
-            if args[0] == key and not args[2] and entry['request']['id'] not in revoked:
+            if args[0] == key and args[2] and entry['request']['id'] not in revoked:
                 revoke(entry['request']['id'], Terminate=True)
                 self.__schedule = None
                 self.__revoked = None
