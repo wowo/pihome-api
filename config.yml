@@ -55,6 +55,17 @@ switch:
             name: 'Brama główna'
             type: click
             pin: 6
+        gate_main_door_mode:
+            id: gate_main_door_mode
+            name: 'Furtka'
+            type: sequence
+            sequence:
+                - switch: gate_main
+                  execute_after: 0
+                - switch: gate_main
+                  execute_after: 8
+                - switch: gate_main
+                  execute_after: 120
         gate_garage:
             id: gate_garage
             name: 'Brama garaż'

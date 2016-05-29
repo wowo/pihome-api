@@ -161,11 +161,14 @@ class EthernetSwitch(AbstractSwitch):
         self.url = 'http://' + url
 
     def get_state(self):
-        status_xml = urllib2.urlopen(self.url + '/status.xml').read()
-        xml = parseString(status_xml)
-        node_name = 'led' + str(self.address)
+        try:
+            status_xml = urllib2.urlopen(self.url + '/status.xml').read()
+            xml = parseString(status_xml)
+            node_name = 'led' + str(self.address)
 
-        return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
+            return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
+        except urllib2.URLError:
+            return None
 
     def set_state(self, new_state):
         current_state = self.get_state()
@@ -268,3 +271,19 @@ class AggregateSwitch(AbstractSwitch):
 
     def get_opposite_state(self, new_state):
         return 'stop'
+
+class SequenceSwitch(AbstractSwitch):
+    def __init__(self, sequence):
+        AbstractSwitch.__init__(self)
+        self.sequence = sequence  # type: array
+        self.pin = pin  # type: int
+        os.system('gpio mode %s out' % str(self.pin))
+
+    def get_state(self):
+        return 0
+
+    def set_state(self, new_state):
+        os.system('gpio write %s 1' % (str(self.pin)))
+        time.sleep(0.5)
+        os.system('gpio write %s 0' % (str(self.pin)))
+        self.notify_state_change(self.switch_id, 'click')

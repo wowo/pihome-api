@@ -88,7 +88,7 @@ class StoringService:
             sensor = SensorService()
             sensors = sensor.get_list()
             for key in sensors:
-                print('> store %.2f for sensor %s (%s)' % (sensors[key]['value'], sensors[key]['name'], sensors[key]['key']))
+                print('> store %.2f for sensor %s' % (sensors[key]['value'], sensors[key]['key']))
                 data[sensors[key]['address']] = {
                     'temperature':  sensors[key]['value'],
                     'id': key,
