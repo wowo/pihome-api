@@ -132,7 +132,7 @@ class SwitchService:
                 params['sequence'],
             )
         else:
-            raise RuntimeError('Unknown switch driver')
+            raise RuntimeError('Unknown switch driver ' + params['type'])
 
 
 class AbstractSwitch:
@@ -302,7 +302,7 @@ class ClickSequenceSwitch(AbstractSwitch):
         for operation in self.sequence:
             if 0 == operation['execute_after']:
                 switch = ClickSwitch(
-                    operation['switch_id'],
+                    operation['switch'],
                     operation['pin'],
                 )
                 switch.set_state(new_state)
