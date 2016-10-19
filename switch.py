@@ -8,6 +8,7 @@ import json
 import memcache
 import os
 import pika
+import re
 import subprocess
 import time
 import urllib2
@@ -113,8 +114,9 @@ class SwitchService:
             return AggregateSwitch(switches)
         if 'ethernet' == params['type']:
             return EthernetSwitch(params['id'],
-                                  self.config['ethernet']['address'],
-                                  params['address'])
+                                  self.config['ethernet']['subnet'],
+                                  params['address'],
+                                  self.cache)
         elif 'two_way' == params['type']:
             return TwoWaySwitch(
                 params['id'],
@@ -166,26 +168,52 @@ class AbstractSwitch:
 
 
 class EthernetSwitch(AbstractSwitch):
-    def __init__(self, port_id, url, address):
+    def __init__(self, port_id, subnet, address, cache):
         AbstractSwitch.__init__(self)
         self.port_id = port_id
         self.address = address
-        self.url = 'http://' + url
+        self.subnet = subnet
+        self.cache = cache
+        self.ip = self.cache.get('ethernet_ip')
 
     def get_state(self):
-        try:
-            status_xml = urllib2.urlopen(self.url + '/status.xml').read()
-            xml = parseString(status_xml)
-            node_name = 'led' + str(self.address)
+        state = None
+        if self.ip:
+            state = self.get_state_for_ips([self.ip])
 
-            return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
-        except urllib2.URLError:
-            return None
+        if not state:
+            state = self.get_state_for_ips(self.get_alive_ips(self.subnet))
+
+        return state
+
+    def get_state_for_ips(self, ips):
+        for ip in ips:
+            try:
+                xml = self.get_status_xml(ip)
+                node_name = 'led' + str(self.address)
+
+                return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
+            except urllib2.URLError:
+                pass
+
+        return None
+
+    def get_alive_ips(self, subnet):
+        nmap = subprocess.check_output('nmap -sP ' + subnet, shell=True)
+
+        return re.findall('for ([0-9\.]+)', nmap)
+
+    def get_status_xml(self, ip):
+        status_xml = urllib2.urlopen('http://%s/status.xml' % ip).read()
+        self.ip = ip
+        self.cache.set('ethernet_ip', self.ip, 60 * 60 * 24 * 7) # cache for 7 days
+
+        return parseString(status_xml)
 
     def set_state(self, new_state):
         current_state = self.get_state()
         if int(current_state) != int(new_state):
-            address = self.url + '/leds.cgi?led=' + str(self.address)
+            address = 'http://%s/leds.cgi?led=%s' % (self.ip, str(self.address))
             urllib2.urlopen(address).read()
             self.notify_state_change(self.port_id, new_state)
 
