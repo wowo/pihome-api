@@ -174,12 +174,12 @@ class EthernetSwitch(AbstractSwitch):
         self.address = address
         self.subnet = subnet
         self.cache = cache
+        self.ip = self.cache.get('ethernet_ip')
 
     def get_state(self):
         state = None
-        ip = self.cache.get('ethernet_ip')
-        if ip:
-            state = self.get_state_for_ips([ip])
+        if self.ip:
+            state = self.get_state_for_ips([self.ip])
 
         if not state:
             state = self.get_state_for_ips(self.get_alive_ips(self.subnet))
@@ -189,10 +189,7 @@ class EthernetSwitch(AbstractSwitch):
     def get_state_for_ips(self, ips):
         for ip in ips:
             try:
-                status_xml = urllib2.urlopen('http://%s/status.xml' % ip).read()
-                self.cache.set('ethernet_ip', ip, 60 * 60 * 24 * 7) # cache for 7 days
-
-                xml = parseString(status_xml)
+                xml = self.get_status_xml(ip)
                 node_name = 'led' + str(self.address)
 
                 return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
@@ -206,11 +203,17 @@ class EthernetSwitch(AbstractSwitch):
 
         return re.findall('for ([0-9\.]+)', nmap)
 
+    def get_status_xml(self, ip):
+        status_xml = urllib2.urlopen('http://%s/status.xml' % ip).read()
+        self.ip = ip
+        self.cache.set('ethernet_ip', self.ip, 60 * 60 * 24 * 7) # cache for 7 days
+
+        return parseString(status_xml)
 
     def set_state(self, new_state):
         current_state = self.get_state()
         if int(current_state) != int(new_state):
-            address = self.url + '/leds.cgi?led=' + str(self.address)
+            address = 'http://%s/leds.cgi?led=%s' % (self.ip, str(self.address))
             urllib2.urlopen(address).read()
             self.notify_state_change(self.port_id, new_state)
 

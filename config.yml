@@ -4,31 +4,6 @@ switch:
     raspberry:
         path: '/sys/class/gpio/'
     devices:
-        heating_ground_floor:
-            id: heating_ground_floor
-            name: 'Podłogówka parter'
-            type: ethernet
-            address: 6
-        heating_first_floor:
-            id: heating_first_floor
-            name: 'Podłogówka piętro'
-            type: ethernet
-            address: 7
-        hot_water_pump:
-            id: hot_water_pump
-            name: 'Pompa CWU'
-            type: ethernet
-            address: 3
-        light_stairs:
-            id: light_stairs
-            name: 'Lampa schody'
-            type: ethernet
-            address: 4
-        light_hall:
-            id: light_hall
-            name: 'Lampa hall'
-            type: ethernet
-            address: 5
         blind_dinning:
             id: blind_dinning
             name: 'Roleta jadalnia'
@@ -73,7 +48,37 @@ switch:
             id: gate_garage
             name: 'Brama garaż'
             type: click
-            pin: 11
+            pin: 14
+        hot_water_pump:
+            id: hot_water_pump
+            name: 'Pompa CWU'
+            type: ethernet
+            address: 3
+        heating_ground_floor:
+            id: heating_ground_floor
+            name: 'Pompa podł. parter'
+            type: ethernet
+            address: 6
+        heating_first_floor:
+            id: heating_first_floor
+            name: 'Pompa podł. piętro'
+            type: ethernet
+            address: 7
+        light_stairs:
+            id: light_stairs
+            name: 'Lampa schody'
+            type: ethernet
+            address: 4
+        light_hall:
+            id: light_hall
+            name: 'Lampa hall'
+            type: ethernet
+            address: 5
+        light_rear:
+            id: light_rear
+            name: 'Lampa dwór tył'
+            type: ethernet
+            address: 1
 sensor:
     w1thermometer:
         base_path: '/sys/bus/w1/devices/'
@@ -85,7 +90,7 @@ sensor:
         outdoor_east:
             name: 'Zewnątrz'
             type: w1thermometer
-            address: '28-000002726a7c'
+            address: '28-0416342708ff'
         basement:
             name: 'Piwnica'
             type: w1thermometer
@@ -98,10 +103,10 @@ sensor:
             name: 'Kuchnia'
             type: w1thermometer
             address: '28-000005caf175'
-        garage:
-            name: 'Garaż'
-            type: w1thermometer
-            address: '28-000006142545'
+        #garage:
+        #    name: 'Garaż'
+        #    type: w1thermometer
+        #    address: '28-000006142545'
 storing:
     mongo:
         host: 'linus.mongohq.com'
