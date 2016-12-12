@@ -53,6 +53,9 @@ docs/_build/
 # PyBuilder
 target/
 
-*.sw[op]
+*.sw[opn]
 
 .idea/*
+
+config.yml
+htpasswd

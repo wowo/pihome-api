@@ -80,6 +80,8 @@ class SwitchService:
                     'state': self.get_state(device),
                     'when': str(datetime.now()),
                     'scheduled': scheduled,
+                    'stateless': device['stateless'] if 'stateless' in device else False,
+                    'durations': device['durations'] if 'durations' in device else False,
                     'type': device['type']}
             self.cache.set(key, info)
 

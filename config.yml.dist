@@ -11,6 +11,7 @@ switch:
             up_pin: 1
             down_pin: 16
             seconds: 22
+            stateless: true
         blind_terrace:
             id: blind_terrace
             name: 'Roleta taras'
@@ -18,6 +19,7 @@ switch:
             up_pin: 4
             down_pin: 5
             seconds: 30
+            stateless: true
         blind_ground_floor:
             id: blind_ground_floor
             name: 'Roleta parter'
@@ -25,11 +27,13 @@ switch:
             aggregate:
                 - blind_terrace
                 - blind_dinning
+            stateless: true
         gate_main:
             id: gate_main
             name: 'Brama główna'
             type: click
             pin: 6
+            stateless: true
         gate_main_door_mode:
             id: gate_main_door_mode
             name: 'Brama furtka'
@@ -44,49 +48,53 @@ switch:
                 - switch: gate_main
                   pin: 6
                   execute_after: 120
+            stateless: true
         gate_garage:
             id: gate_garage
             name: 'Brama garaż'
             type: click
             pin: 14
+            stateless: true
         hot_water_pump:
             id: hot_water_pump
             name: 'Pompa CWU'
             type: ethernet
             address: 3
+            durations: [15m]
         heating_ground_floor:
             id: heating_ground_floor
             name: 'Pompa podł. parter'
             type: ethernet
             address: 6
+            durations: [3h, 6h, 12h, X]
         heating_first_floor:
             id: heating_first_floor
             name: 'Pompa podł. piętro'
             type: ethernet
             address: 7
+            durations: [3h, 6h, 12h, X]
         light_stairs:
             id: light_stairs
             name: 'Lampa schody'
             type: ethernet
             address: 4
+            durations: [3h, 6h, 12h, X]
         light_hall:
             id: light_hall
             name: 'Lampa hall'
             type: ethernet
             address: 5
+            durations: [3h, 6h, 12h, X]
         light_rear:
             id: light_rear
             name: 'Lampa dwór tył'
             type: ethernet
             address: 1
+            durations: [3h, 6h, 12h, X]
 sensor:
     w1thermometer:
         base_path: '/sys/bus/w1/devices/'
     devices:
-        #outdoor_west:
-        #    name: 'Zewnątrz zachód'
-        #    type: w1thermometer
-        #    address: '28-000002726a7c'
         outdoor_east:
             name: 'Zewnątrz'
             type: w1thermometer
@@ -103,14 +111,10 @@ sensor:
             name: 'Kuchnia'
             type: w1thermometer
             address: '28-000005caf175'
-        #garage:
-        #    name: 'Garaż'
-        #    type: w1thermometer
-        #    address: '28-000006142545'
 storing:
     mongo:
-        host: 'linus.mongohq.com'
+        host: 'localhost'
         port: 10080
-        user: 'pithermo'
-        pass: 'pi2013'
+        user: 'user'
+        pass: 'pass'
         collection: 'pithermo'

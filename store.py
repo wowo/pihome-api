@@ -24,7 +24,7 @@ class StoringService:
     def __get_db(self):
         self.conn = MongoClient(self.config['host'], self.config['port'])
         db = self.conn[self.config['collection']]
-        db.authenticate(self.config['user'], self.config['pass'])
+        db.authenticate(self.config['user'], self.config['pass'], source='admin')
 
         return db
 
