@@ -2,9 +2,13 @@
 
 from celery import Celery
 import json
+import os
 import urllib2
+import yaml
 
-celery = Celery('tasks', broker='amqp://localhost//')
+path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
+config = yaml.load(file(path))['storing']['rabbitmq']
+celery = Celery('tasks', broker='amqp://%s:%s@%s//' % (config['user'], config['pass'], config['host']))
 # celery.config_from_object('celeryconfig')
 
 

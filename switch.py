@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from celery.task.control import inspect, revoke
+from celery import Celery
 from datetime import datetime, timedelta
 import socket
 from xml.dom.minidom import parseString
@@ -87,10 +88,15 @@ class SwitchService:
 
         return info
 
+    def __get_celery(self):
+        path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
+        config = yaml.load(file(path))['storing']['rabbitmq']
+        return Celery('tasks', broker='amqp://%s:%s@%s//' % (config['user'], config['pass'], config['host']))
+
     def __get_schedule(self):
         if self.__schedule is None:
             try:
-                self.__schedule = inspect().scheduled()['celery@raspberrypi']
+                self.__schedule = self.__get_celery().control.inspect().scheduled()['celery@raspberrypi']
             except socket.error:
                 self.__schedule = []
 
@@ -99,7 +105,7 @@ class SwitchService:
     def __get_revoked(self):
         if self.__revoked is None:
             try:
-                self.__revoked = inspect().revoked()['celery@raspberrypi']
+                self.__revoked = self.__get_celery().control.inspect().revoked()['celery@raspberrypi']
             except socket.error:
                 self.__revoked = []
 
@@ -154,7 +160,10 @@ class AbstractSwitch:
         payload = {'key': sensor_key,
                    'state': new_state,
                    'date': str(datetime.now())}
-        parameters = pika.ConnectionParameters('localhost')
+        path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
+        config = yaml.load(file(path))['storing']['rabbitmq']
+        credentials = pika.PlainCredentials(config['user'], config['pass'])
+        parameters = pika.ConnectionParameters(config['host'], credentials=credentials)
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
         channel.basic_publish(exchange='',

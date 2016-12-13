@@ -105,7 +105,10 @@ class StoringService:
             traceback.print_exc()
 
     def consume_switch_state(self):
-        parameters = pika.ConnectionParameters('localhost')
+        path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
+        config = yaml.load(file(path))['storing']['rabbitmq']
+        credentials = pika.PlainCredentials(config['user'], config['pass'])
+        parameters = pika.ConnectionParameters(config['host'], credentials=credentials)
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
 

@@ -118,3 +118,7 @@ storing:
         user: 'user'
         pass: 'pass'
         collection: 'pithermo'
+    rabbitmq:
+        host: 'localhost'
+        user: 'guest'
+        pass: 'guest'
