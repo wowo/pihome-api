@@ -14,6 +14,8 @@ import subprocess
 import time
 import urllib2
 import yaml
+import logging
+from pika.exceptions import AMQPConnectionError
 
 
 class SwitchService:
@@ -97,7 +99,7 @@ class SwitchService:
         if self.__schedule is None:
             try:
                 self.__schedule = self.__get_celery().control.inspect().scheduled()['celery@raspberrypi']
-            except socket.error:
+            except (socket.error, TypeError):
                 self.__schedule = []
 
         return self.__schedule
@@ -106,7 +108,7 @@ class SwitchService:
         if self.__revoked is None:
             try:
                 self.__revoked = self.__get_celery().control.inspect().revoked()['celery@raspberrypi']
-            except socket.error:
+            except (socket.error, TypeError):
                 self.__revoked = []
 
         return self.__revoked
@@ -136,6 +138,8 @@ class SwitchService:
                 params['id'],
                 params['pin'],
             )
+        elif 'raspberry' == params['type']:
+            return RaspberrySwitch(params['pin'])
         elif 'click_sequence' == params['type']:
             return ClickSequenceSwitch(
                 params['id'],
@@ -162,14 +166,17 @@ class AbstractSwitch:
                    'date': str(datetime.now())}
         path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
         config = yaml.load(file(path))['storing']['rabbitmq']
-        credentials = pika.PlainCredentials(config['user'], config['pass'])
-        parameters = pika.ConnectionParameters(config['host'], credentials=credentials)
-        connection = pika.BlockingConnection(parameters)
-        channel = connection.channel()
-        channel.basic_publish(exchange='',
-                              routing_key='switch_state',
-                              properties=pika.BasicProperties(delivery_mode=2),
-                              body=json.dumps(payload))
+        try:
+            credentials = pika.PlainCredentials(config['user'], config['pass'])
+            parameters = pika.ConnectionParameters(config['host'], credentials=credentials)
+            connection = pika.BlockingConnection(parameters)
+            channel = connection.channel()
+            channel.basic_publish(exchange='',
+                                  routing_key='switch_state',
+                                  properties=pika.BasicProperties(delivery_mode=2),
+                                  body=json.dumps(payload))
+        except AMQPConnectionError as e:
+            raise e
 
     def get_opposite_state(self, new_state):
         return 1 if int(new_state) == 0 else 0
