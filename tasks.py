@@ -5,11 +5,13 @@ import json
 import os
 import urllib2
 import yaml
+import celeryconfig
+import pika
+from datetime import datetime, timedelta
+from store import StoringService
 
-path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-config = yaml.load(file(path))['storing']['rabbitmq']
-celery = Celery('tasks', broker='amqp://%s:%s@%s//' % (config['user'], config['pass'], config['host']))
-# celery.config_from_object('celeryconfig')
+celery = Celery('tasks')
+celery.config_from_object(celeryconfig)
 
 
 @celery.task
@@ -21,3 +23,11 @@ def toggle_switch(key, new_state, revoke_other_scheduled):
     request = urllib2.Request(url, data, {'Content-Type': 'application/json'})
     request.get_method = lambda: 'PATCH'
     urllib2.urlopen(request).read()
+
+@celery.task
+def notify_state_change(sensor_key, new_state):
+    date = datetime.now()
+    print "> Store switch %s state %s at %s" % (sensor_key, new_state, date)
+
+    service = StoringService()
+    service.store_switch_state(sensor_key, new_state, date)

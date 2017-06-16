@@ -16,6 +16,7 @@ import urllib2
 import yaml
 import logging
 from pika.exceptions import AMQPConnectionError
+import celeryconfig
 
 
 class SwitchService:
@@ -91,9 +92,9 @@ class SwitchService:
         return info
 
     def __get_celery(self):
-        path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-        config = yaml.load(file(path))['storing']['rabbitmq']
-        return Celery('tasks', broker='amqp://%s:%s@%s//' % (config['user'], config['pass'], config['host']))
+        task_celery = Celery('tasks')
+        task_celery.config_from_object(celeryconfig)
+        return task_celery
 
     def __get_schedule(self):
         if self.__schedule is None:
@@ -159,25 +160,6 @@ class AbstractSwitch:
     def get_state(self):
         raise NotImplementedError("Please implement this method")
 
-    @staticmethod
-    def notify_state_change(sensor_key, new_state):
-        payload = {'key': sensor_key,
-                   'state': new_state,
-                   'date': str(datetime.now())}
-        path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-        config = yaml.load(file(path))['storing']['rabbitmq']
-        try:
-            credentials = pika.PlainCredentials(config['user'], config['pass'])
-            parameters = pika.ConnectionParameters(config['host'], credentials=credentials)
-            connection = pika.BlockingConnection(parameters)
-            channel = connection.channel()
-            channel.basic_publish(exchange='',
-                                  routing_key='switch_state',
-                                  properties=pika.BasicProperties(delivery_mode=2),
-                                  body=json.dumps(payload))
-        except AMQPConnectionError as e:
-            raise e
-
     def get_opposite_state(self, new_state):
         return 1 if int(new_state) == 0 else 0
 
@@ -233,7 +215,8 @@ class EthernetSwitch(AbstractSwitch):
         if int(current_state) != int(new_state):
             address = 'http://%s/leds.cgi?led=%s' % (self.ip, str(self.address))
             urllib2.urlopen(address).read()
-            self.notify_state_change(self.port_id, new_state)
+            from tasks import notify_state_change
+            notify_state_change.apply_async((self.port_id, new_state))
 
 
 class RaspberrySwitch(AbstractSwitch):
@@ -272,17 +255,18 @@ class TwoWaySwitch(AbstractSwitch):
         return state
 
     def set_state(self, new_state):
+        from tasks import notify_state_change
         if 'stop' == new_state:
             self.up.set_state(0)
             self.down.set_state(0)
         elif 'up' == new_state:
             self.down.set_state(0)
             self.up.set_state(1)
-            self.notify_state_change(self.switch_id, new_state)
+            notify_state_change.apply_async((self.switch_id, new_state))
         elif 'down' == new_state:
             self.up.set_state(0)
             self.down.set_state(1)
-            self.notify_state_change(self.switch_id, new_state)
+            notify_state_change.apply_async((self.switch_id, new_state))
 
     def get_opposite_state(self, new_state):
         return 'stop'
@@ -308,7 +292,8 @@ class ClickSwitch(AbstractSwitch):
         os.system('gpio write %s 1' % (str(self.pin)))
         time.sleep(0.5)
         os.system('gpio write %s 0' % (str(self.pin)))
-        self.notify_state_change(self.switch_id, 'click')
+        from tasks import notify_state_change
+        notify_state_change.apply_async((self.switch_id, 'click'))
 
 
 class AggregateSwitch(AbstractSwitch):

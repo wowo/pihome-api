@@ -57,30 +57,13 @@ class StoringService:
 
         return data
 
-    def store_switch_state(self, ch, method, properties, body):
-        try:
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            data = json.loads(body)
-            print "Store switch %s state %s at %s" % (
-                data['key'],
-                data['state'],
-                data['date'])
-
-            date = datetime.strptime(data['date'], '%Y-%m-%d %H:%M:%S.%f')
-            self.__get_db().switches.insert({
-                'date': date,
-                'created_at': datetime.now(),
-                'switch': data['key'],
-                'state': data['state']
-            })
-            self.conn.close()
-        except Exception as e:
-            print "\t%s occured with: %s" % (type(e), e)
-            traceback.print_exc()
-            ch.basic_publish('dlx',
-                             'switch_state',
-                             body,
-                             properties=properties)
+    def store_switch_state(self, sensor_key, new_state, date):
+        self.__get_db().switches.insert({
+            'date': date,
+            'created_at': date,
+            'switch': sensor_key,
+            'state': new_state
+        })
 
     def store_sensors_state(self):
         try:
