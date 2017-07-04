@@ -1,21 +1,20 @@
 #!/usr/bin/python
 
-from celery.task.control import inspect, revoke
-from celery import Celery
 from datetime import datetime, timedelta
+import pickle
 import socket
 from xml.dom.minidom import parseString
-import json
-import memcache
 import os
-import pika
 import re
+import redis
 import subprocess
 import time
 import urllib2
+
+from celery import Celery
 import yaml
-import logging
-from pika.exceptions import AMQPConnectionError
+
+from celery.task.control import revoke
 import celeryconfig
 
 
@@ -23,7 +22,7 @@ class SwitchService:
     def __init__(self):
         path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
         self.config = yaml.load(file(path))['switch']
-        self.cache = memcache.Client(['localhost:11211'], debug=0)
+        self.cache = redis.StrictRedis(host='localhost', port=6379, db=0)
         self.__schedule = None
         self.__revoked = None
 
@@ -67,7 +66,9 @@ class SwitchService:
 
     def __get_switch(self, key):
         info = self.cache.get(key)
-        if info is None:
+        if info:
+            info = pickle.loads(info)
+        else:
             device = self.config['devices'][key]
 
             scheduled = None
@@ -87,11 +88,12 @@ class SwitchService:
                     'stateless': device['stateless'] if 'stateless' in device else False,
                     'durations': device['durations'] if 'durations' in device else False,
                     'type': device['type']}
-            self.cache.set(key, info)
+            self.cache.set(key, pickle.dumps(info))
 
         return info
 
-    def __get_celery(self):
+    @staticmethod
+    def __get_celery():
         task_celery = Celery('tasks')
         task_celery.config_from_object(celeryconfig)
         return task_celery
@@ -198,7 +200,8 @@ class EthernetSwitch(AbstractSwitch):
 
         return None
 
-    def get_alive_ips(self, subnet):
+    @staticmethod
+    def get_alive_ips(subnet):
         nmap = subprocess.check_output('nmap -sP ' + subnet, shell=True)
 
         return re.findall('for ([0-9\.]+)', nmap)
@@ -206,7 +209,7 @@ class EthernetSwitch(AbstractSwitch):
     def get_status_xml(self, ip):
         status_xml = urllib2.urlopen('http://%s/status.xml' % ip).read()
         self.ip = ip
-        self.cache.set('ethernet_ip', self.ip, 60 * 60 * 24 * 7) # cache for 7 days
+        self.cache.setex('ethernet_ip', 60 * 60 * 24 * 7, self.ip)  # cache for 7 days
 
         return parseString(status_xml)
 

@@ -1,13 +1,12 @@
 #!/usr/bin/python
 
-from celery import Celery
 import json
-import os
 import urllib2
-import yaml
+from datetime import datetime
+
+from celery import Celery
+
 import celeryconfig
-import pika
-from datetime import datetime, timedelta
 from store import StoringService
 
 celery = Celery('tasks')
@@ -23,6 +22,7 @@ def toggle_switch(key, new_state, revoke_other_scheduled):
     request = urllib2.Request(url, data, {'Content-Type': 'application/json'})
     request.get_method = lambda: 'PATCH'
     urllib2.urlopen(request).read()
+
 
 @celery.task
 def notify_state_change(sensor_key, new_state):

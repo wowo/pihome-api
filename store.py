@@ -1,15 +1,16 @@
 #!/usr/bin/python
 
-from sensor import SensorService
 from datetime import datetime
-from pymongo import MongoClient
-import json
 import logging
 import os
-import pika
 import sys
-import yaml
 import traceback
+
+from pymongo import MongoClient
+import pika
+import yaml
+
+from sensor import SensorService
 
 DATE_FORMAT = '%Y-%m-%d %H:%M'
 
@@ -114,6 +115,7 @@ class StoringService:
 
         channel.basic_consume(self.store_switch_state, queue='switch_state')
         channel.start_consuming()
+
 
 service = StoringService()
 queue_to_handle = 'switch_state' if len(sys.argv) == 1 else sys.argv[1]

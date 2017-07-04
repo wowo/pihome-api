@@ -119,6 +119,7 @@ def cron_create():
 
     return get_cron_comment(input_data, job)
 
+
 @app.route('/cron/<cron_id>', methods=['PUT'])
 def cron_edit(cron_id):
     input_data = json.loads(request.data)
@@ -145,7 +146,7 @@ def get_cron_comment(input_data, job):
         comment['duration'] = int(input_data['duration'])
 
     return json.dumps(comment)
-    
+
 
 def get_cron_command(input_data):
     payload = {
@@ -154,8 +155,8 @@ def get_cron_command(input_data):
     if 'duration' in input_data:
         payload['duration'] = int(input_data['duration'])
 
-    return 'curl localhost/api/switch/%s -XPATCH -d \'%s\' -H \'Content-Type: application/json\''\
-              % (input_data['switch'], json.dumps(payload))
+    pattern = 'curl localhost/api/switch/%s -XPATCH -d \'%s\' -H \'Content-Type: application/json\''
+    return pattern % (input_data['switch'], json.dumps(payload))
 
 
 @app.route('/cron/<cron_id>', methods=['DELETE'])
