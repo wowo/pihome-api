@@ -11,6 +11,5 @@ setup(name='pihome',
            'pymongo',
            'python-crontab>1.9',
            'python-dateutil',
-           'python-memcached',
            'pyyaml',
       ])

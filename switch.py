@@ -28,9 +28,14 @@ class SwitchService:
 
     def get_list(self, fresh):
         switches = {}
-        for key in self.config['devices']:
-            if fresh:
-                self.cache.delete(key)
+        if not fresh:
+            switches = self.cache.hgetall('_switches')
+            switches = {k: pickle.loads(v) for k, v in switches.items()}
+        else:
+            self.cache.delete('_switches')
+
+        # load remaining switches defined in config but absent in _switches hash Redis entry
+        for key in set(self.config['devices'].keys()) - set(switches.keys()):
             switches[key] = self.__get_switch(str(key))
 
         return switches
@@ -65,30 +70,27 @@ class SwitchService:
                 self.__revoked = None
 
     def __get_switch(self, key):
-        info = self.cache.get(key)
-        if info:
-            info = pickle.loads(info)
-        else:
-            device = self.config['devices'][key]
+        device = self.config['devices'][key]
 
-            scheduled = None
-            if self.__get_switch_driver(device).allow_show_schedule():
-                revoked = self.__get_revoked()
-                for entry in self.__get_schedule():
-                    args = eval(entry['request']['args'])
-                    if args[0] == key and entry['request']['id'] not in revoked:
-                        scheduled = {'when': entry['eta'], 'state': args[1]}
-                        break
+        scheduled = None
+        if self.__get_switch_driver(device).allow_show_schedule():
+            revoked = self.__get_revoked()
+            for entry in self.__get_schedule():
+                args = eval(entry['request']['args'])
+                if args[0] == key and entry['request']['id'] not in revoked:
+                    scheduled = {'when': entry['eta'], 'state': args[1]}
+                    break
 
-            info = {'key': key,
-                    'name': device['name'],
-                    'state': self.get_state(device),
-                    'when': str(datetime.now()),
-                    'scheduled': scheduled,
-                    'stateless': device['stateless'] if 'stateless' in device else False,
-                    'durations': device['durations'] if 'durations' in device else False,
-                    'type': device['type']}
-            self.cache.set(key, pickle.dumps(info))
+        info = {'key': key,
+                'name': device['name'],
+                'state': self.get_state(device),
+                'when': str(datetime.now()),
+                'scheduled': scheduled,
+                'stateless': device['stateless'] if 'stateless' in device else False,
+                'durations': device['durations'] if 'durations' in device else False,
+                'type': device['type']}
+
+        self.cache.hset('_switches', key, pickle.dumps(info))
 
         return info
 
