@@ -43,7 +43,7 @@ def on_connect():
     data = list(sensor.get_list(with_readings=False).values())
     print('--------------------------------------------------------------------------------')
     print('Socket.io connect')
-    emit('sensors', data)
+    emit('sensors', {'all_sensors': data})
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)
