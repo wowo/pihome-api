@@ -9,26 +9,30 @@ import yaml
 class SensorService:
     def __init__(self):
         path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-        self.config = yaml.load(file(path))['sensor']
+        self.config = yaml.load(open(path))['sensor']
 
-    def get_list(self):
+    def get_list(self, with_readings=True):
         sensors = {}
         for key in self.config['devices']:
-            sensors[key] = self.__get_sensor(key)
+            sensors[key] = self.get_sensor_data(key, with_readings)
 
         return sensors
 
+    def get_sensor_data(self, key, with_readings=True):
+        device = self.config['devices'][key]
+        sensor = {
+            'key': key,
+            'address': device['address'],
+            'name': device['name'],
+        }
+        if with_readings:
+            sensor['value'] = self.get_value(device)
+            sensor['when'] =  str(datetime.now())
+        
+        return sensor
+
     def get_value(self, device):
         return self.__get_sensor_driver(device).get_value()
-
-    def __get_sensor(self, key):
-        device = self.config['devices'][key]
-
-        return {'key': key,
-                'address': device['address'],
-                'name': device['name'],
-                'value': self.get_value(device),
-                'when': str(datetime.now())}
 
     def __get_sensor_driver(self, params):
         if 'w1thermometer' == params['type']:
