@@ -126,7 +126,7 @@ class SwitchService:
             switches = []
             for switch in params['aggregate']:
                 switches.append(self.__get_switch_driver(self.config['devices'][switch]))
-            return AggregateSwitch(switches)
+            return AggregateSwitch(switches, self.cache)
         if 'ethernet' == params['type']:
             return EthernetSwitch(params['id'],
                                   self.config['ethernet']['subnet'],
@@ -302,9 +302,10 @@ class ClickSwitch(AbstractSwitch):
 
 
 class AggregateSwitch(AbstractSwitch):
-    def __init__(self, switches):
+    def __init__(self, switches, cache):
         AbstractSwitch.__init__(self)
         self.switches = switches  # type: list
+        self.cache = cache
 
     def get_state(self):
         return self.switches[-1].get_state()
@@ -312,6 +313,7 @@ class AggregateSwitch(AbstractSwitch):
     def set_state(self, new_state):
         for switch in self.switches:
             switch.set_state(new_state)
+	    self.cache.delete('_switches')
 
     def get_duration(self, new_state):
         durations = []
