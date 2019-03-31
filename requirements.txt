@@ -8,3 +8,5 @@ redis==2.10.5
 Flask-SocketIO==2.9.6
 eventlet==0.22.1
 gunicorn
+
+google-cloud-firestore
