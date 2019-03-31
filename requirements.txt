@@ -1,4 +1,4 @@
-PyYAML==3.11
+pyyaml>=4.2b1
 Werkzeug==0.10.4
 celery==4.0.2
 pika==0.9.14
