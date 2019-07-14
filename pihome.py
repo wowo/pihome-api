@@ -29,7 +29,11 @@ def hal_response(data):
                     mimetype='application/json')
 
 
-@app.route('/switch', methods=['GET'])
+@app.route('/ping', methods=['get'])
+def ping():
+    return Response(response="pong")
+
+@app.route('/switch', methods=['get'])
 def switch_list():
     switch = SwitchService()
 
