@@ -1,3 +1,5 @@
 no-ip2.conf
 config.yml
 htpasswd
+fullchain.pem
+privkey.pem
