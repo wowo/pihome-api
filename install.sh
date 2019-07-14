@@ -34,6 +34,8 @@ byobu-enable
 ### apache 
 sudo mv python.wsgi.conf /etc/apache2/sites-available/
 sudo a2ensite python.wsgi.conf
+sudo a2enmod ssl
+
 sudo mkdir /var/www/pihome-api /var/www/pihome
 sudo chown pi:pi pihome*
 
