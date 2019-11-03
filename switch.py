@@ -17,6 +17,8 @@ import yaml
 from celery.task.control import revoke
 import celeryconfig
 
+import jwt
+
 
 class SwitchService:
     def __init__(self):
@@ -43,10 +45,10 @@ class SwitchService:
     def get_state(self, device):
         return self.__get_switch_driver(device).get_state()
 
-    def toggle(self, key, new_state, duration=None):
+    def toggle(self, key, new_state, duration=None, user=None):
         device = self.config['devices'][key]
         driver = self.__get_switch_driver(device)
-        driver.set_state(new_state)
+        driver.set_state(new_state, user)
         self.__revoke_scheduled(str(key))
         self.cache.delete(str(key))
 
@@ -158,7 +160,7 @@ class AbstractSwitch:
     def __init__(self):
         pass
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, user):
         raise NotImplementedError("Please implement this method")
 
     def get_state(self):
@@ -215,13 +217,13 @@ class EthernetSwitch(AbstractSwitch):
 
         return parseString(status_xml)
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, user):
         current_state = self.get_state()
         if int(current_state) != int(new_state):
             address = 'http://%s/leds.cgi?led=%s' % (self.ip, str(self.address))
             urllib2.urlopen(address).read()
             from tasks import notify_state_change
-            notify_state_change.apply_async((self.port_id, new_state))
+            notify_state_change.apply_async((self.port_id, new_state, user))
 
 
 class RaspberrySwitch(AbstractSwitch):
@@ -237,7 +239,7 @@ class RaspberrySwitch(AbstractSwitch):
         except subprocess.CalledProcessError:
             return None
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, user):
         if new_state != self.get_state():
             os.system('gpio write %s %s' % (str(self.pin), str(new_state)))
 
@@ -259,19 +261,19 @@ class TwoWaySwitch(AbstractSwitch):
 
         return state
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, user):
         from tasks import notify_state_change
         if 'stop' == new_state:
-            self.up.set_state(0)
-            self.down.set_state(0)
+            self.up.set_state(0, user)
+            self.down.set_state(0, user)
         elif 'up' == new_state:
-            self.down.set_state(0)
-            self.up.set_state(1)
-            notify_state_change.apply_async((self.switch_id, new_state))
+            self.down.set_state(0, user)
+            self.up.set_state(1, user)
+            notify_state_change.apply_async((self.switch_id, new_state, user))
         elif 'down' == new_state:
-            self.up.set_state(0)
-            self.down.set_state(1)
-            notify_state_change.apply_async((self.switch_id, new_state))
+            self.up.set_state(0, user)
+            self.down.set_state(1, user)
+            notify_state_change.apply_async((self.switch_id, new_state, user))
 
     def get_opposite_state(self, new_state):
         return 'stop'
@@ -293,12 +295,12 @@ class ClickSwitch(AbstractSwitch):
     def get_state(self):
         return 0
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, user):
         os.system('gpio write %s 1' % (str(self.pin)))
         time.sleep(0.5)
         os.system('gpio write %s 0' % (str(self.pin)))
         from tasks import notify_state_change
-        notify_state_change.apply_async((self.switch_id, 'click'))
+        notify_state_change.apply_async((self.switch_id, 'click', user))
 
 
 class AggregateSwitch(AbstractSwitch):
@@ -310,9 +312,9 @@ class AggregateSwitch(AbstractSwitch):
     def get_state(self):
         return self.switches[-1].get_state()
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, user):
         for switch in self.switches:
-            switch.set_state(new_state)
+            switch.set_state(new_state, user)
 	    self.cache.delete('_switches')
 
     def get_duration(self, new_state):
@@ -335,7 +337,7 @@ class ClickSequenceSwitch(AbstractSwitch):
     def get_state(self):
         return 0
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, user):
         from tasks import toggle_switch
         for operation in self.sequence:
             if 0 == operation['execute_after']:
@@ -343,7 +345,7 @@ class ClickSequenceSwitch(AbstractSwitch):
                     operation['switch'],
                     operation['pin'],
                 )
-                switch.set_state(new_state)
+                switch.set_state(new_state, user)
             else:
                 eta = datetime.utcnow() + timedelta(seconds=int(operation['execute_after']))
                 toggle_switch.apply_async((operation['switch'], 1, False), eta=eta)

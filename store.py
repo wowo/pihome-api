@@ -58,12 +58,13 @@ class StoringService:
 
         return data
 
-    def store_switch_state(self, sensor_key, new_state, date):
+    def store_switch_state(self, sensor_key, new_state, date, user):
         self.__get_db().switches.insert({
             'date': date,
             'created_at': date,
             'switch': sensor_key,
-            'state': new_state
+            'state': new_state,
+            'user': user
         })
 
     def store_sensors_state(self):

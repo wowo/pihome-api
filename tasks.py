@@ -25,9 +25,9 @@ def toggle_switch(key, new_state, revoke_other_scheduled):
 
 
 @celery.task
-def notify_state_change(sensor_key, new_state):
+def notify_state_change(sensor_key, new_state, user='n/a'):
     date = datetime.now()
-    print "> Store switch %s state %s at %s" % (sensor_key, new_state, date)
+    print "> Store switch %s state %s at %s by %s" % (sensor_key, new_state, date, user)
 
     service = StoringService()
-    service.store_switch_state(sensor_key, new_state, date)
+    service.store_switch_state(sensor_key, new_state, date, user)

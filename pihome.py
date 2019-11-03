@@ -12,6 +12,10 @@ import dateutil.parser
 import json
 import sys
 import uuid
+import jwt
+
+import logging
+from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
 
@@ -42,12 +46,14 @@ def switch_list():
 
 @app.route('/switch/<key>', methods=['PATCH'])
 def switch_toggle(key):
+    app.logger.error('switch toggle %s by %s' % (key,  get_authenticated_user(request)))
     switch = SwitchService()
     input_data = json.loads(request.data)
     duration = timedelta(minutes=int(input_data['duration'])) if 'duration' in input_data else None
     data = switch.toggle(key,
                          input_data['state'],
-                         duration)
+                         duration,
+                         get_authenticated_user(request))
 
     return jsonify(data)
 
@@ -162,6 +168,12 @@ def get_cron_command(input_data):
     pattern = 'curl localhost/api/switch/%s -XPATCH -d \'%s\' -H \'Content-Type: application/json\''
     return pattern % (input_data['switch'], json.dumps(payload))
 
+def get_authenticated_user(request):
+    if 'CF_Authorization' not in request.cookies:
+        return None
+
+    token = jwt.decode(request.cookies.get('CF_Authorization'), verify=False)
+    return token['email']
 
 @app.route('/cron/<cron_id>', methods=['DELETE'])
 def cron_delete(cron_id):
@@ -189,16 +201,12 @@ def add_cors(resp):
     return resp
 
 
-if not app.debug:
-    import logging
-    from logging import FileHandler
-
-    file_handler = FileHandler('/tmp/app.log')
-    file_handler.setLevel(logging.WARNING)
-    app.logger.addHandler(file_handler)
 
 if __name__ != 'pihome-api':  # wsgi
     if __name__ == "__main__" and len(sys.argv) == 1:
+        handler = RotatingFileHandler('/tmp/app.log', maxBytes=10000, backupCount=2)
+        handler.setLevel(logging.INFO)
+        app.logger.addHandler(handler)
         app.run(host='0.0.0.0', port=8999, debug=True)
     elif len(sys.argv) > 1 and sys.argv[1] == '--store-sensors':
         print('> Store sensors state ' + datetime.now().strftime('%Y-%m-%d %H:%M'))
