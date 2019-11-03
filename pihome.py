@@ -112,6 +112,7 @@ def cron_list():
 
             result.append(task_data)
 
+    result = sorted(result, key=lambda x: x['name'])
     return hal_response(result)
 
 
