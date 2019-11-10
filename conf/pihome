@@ -1,0 +1,31 @@
+server {
+    listen 80;
+    listen 443 ssl;
+    server_name _;
+    
+    ssl_certificate /etc/letsencrypt/live/pihome.sznapka.pl/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/pihome.sznapka.pl/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+
+    location /api {
+	rewrite ^/api(.*)$ $1 break;
+        include proxy_params;
+        proxy_pass http://127.0.0.1:5005;
+	proxy_redirect off;
+    }
+
+    location / {
+        alias /var/www/pihome/;
+        expires 3d;
+    }
+
+    location /socket.io {
+        include proxy_params;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_pass http://127.0.0.1:5005/socket.io;
+    }
+}
+

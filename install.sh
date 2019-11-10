@@ -26,15 +26,21 @@ sudo service dhcpcd restart
 # scp -r ~/Development/pihome/dist/* pi@192.168.254.9:/var/www/pihome
 
 ### packages
-sudo apt install -y apache2 git libapache2-mod-wsgi byobu redis vim npm multitail nmap supervisor libdata-validate-ip-perl
+sudo apt install -y nginx git byobu redis vim npm multitail nmap supervisor libdata-validate-ip-perl
 
 ### byobu
 byobu-enable
 
 ### apache 
-sudo mv python.wsgi.conf /etc/apache2/sites-available/
-sudo a2ensite python.wsgi.conf
-sudo a2enmod ssl
+#sudo mv python.wsgi.conf /etc/apache2/sites-available/
+#sudo a2ensite python.wsgi.conf
+#sudo a2enmod ssl
+#sudo service apache2 restart
+### nginx
+sudo cp python /etc/nginx/sites-enabled/
+sudo cp gunicorn.service /etc/systemd/system/
+sudo service gunicorn start
+sudo systemctl enable gunicorn
 
 sudo mkdir /var/www/pihome-api /var/www/pihome
 sudo chown pi:pi pihome*
@@ -45,7 +51,6 @@ git clone git@github.com:wowo/pihome-api.git .
 mv ~/config.yml /var/www/pihome-api/
 mv ~/htpasswd /var/www/pihome-api/
 pip install -r requirements.txt
-sudo service apache2 restart
 echo '*/10 * * * * pi cd /var/www/pihome-api/ && /usr/bin/python pihome.py --store-sensors | tee -a /tmp/cron.log' | sudo tee -a /etc/crontab
 sudo ln -s /home/pi/.local/bin/celery /usr/local/bin/celery
 sudo mv ~/supervisord.conf /etc/supervisor/

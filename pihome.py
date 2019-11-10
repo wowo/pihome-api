@@ -1,6 +1,5 @@
 #!/usr/bin/python
 import os
-
 from crontab import CronTab
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, Response
@@ -13,12 +12,41 @@ import json
 import sys
 import uuid
 import jwt
-
 import logging
 from logging.handlers import RotatingFileHandler
+from flask_socketio import SocketIO, join_room, emit
+from threading import Lock
 
 app = Flask(__name__)
+socketio = SocketIO(app)
+thread = None
+thread_lock = Lock()
 
+SENSORS_SLEEP = 30
+
+def emit_sensors_data(sensor_service, sensors):
+    for key in sensors:
+        data = sensor_service.get_sensor_data(key, with_readings=True)
+        socketio.emit('sensors', data)
+
+def background_thread():
+    sensor_service = SensorService()
+    sensors = sensor_service.get_list(with_readings=False)
+    while True:
+        socketio.sleep(SENSORS_SLEEP)
+        emit_sensors_data(sensor_service, sensors)
+
+@socketio.on('connect')
+def on_connect():
+    global thread
+    with thread_lock:
+        if thread is None:
+            thread = socketio.start_background_task(target=background_thread)
+    sensor_service = SensorService()
+    sensors = sensor_service.get_list(with_readings=False)
+    print('Socket.io connect')
+    emit('sensors', {'all_sensors': list(sensors.values())})
+    emit_sensors_data(sensor_service, sensors)
 
 def hal_response(data):
     def dthandler(obj):

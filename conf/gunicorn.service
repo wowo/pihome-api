@@ -1,0 +1,20 @@
+[Unit]
+Description=gunicorn daemon for pihome
+#Requires=gunicorn.socket
+After=network.target
+
+[Service]
+PIDFile=/run/gunicorn/pid
+User=pi
+Group=pi
+RuntimeDirectory=/run/gunicorn
+WorkingDirectory=/var/www/pihome-api
+ExecStart=/var/www/pihome-api/gunicorn.sh
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+PrivateTmp=true
+LimitNOFILE=8144
+
+[Install]
+WantedBy=multi-user.target
+

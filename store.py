@@ -86,5 +86,5 @@ class StoringService:
             })
             self.conn.close()
         except Exception as e:
-            print "\t%s occured with: %s" % (type(e), e)
+            print("\t%s occured with: %s" % (type(e), e))
             traceback.print_exc()
