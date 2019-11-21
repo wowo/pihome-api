@@ -22,31 +22,32 @@ socketio = SocketIO(app)
 thread = None
 thread_lock = Lock()
 
-SENSORS_SLEEP = 30
+SENSORS_SLEEP = 3
+sensors_data = {}
 
 def emit_sensors_data(sensor_service, sensors):
     for key in sensors:
         data = sensor_service.get_sensor_data(key, with_readings=True)
-        socketio.emit('sensors', data)
+        sensors_data[data['key']] = data
+        socketio.emit('sensor', data)
 
 def background_thread():
     sensor_service = SensorService()
     sensors = sensor_service.get_list(with_readings=False)
     while True:
-        socketio.sleep(SENSORS_SLEEP)
         emit_sensors_data(sensor_service, sensors)
+        socketio.sleep(SENSORS_SLEEP)
 
 @socketio.on('connect')
 def on_connect():
+    logging.warning('socket connected. cached: ' + str(len(sensors_data.values())))
+    for data in sensors_data.values():
+        socketio.emit('sensor', data)
+
     global thread
     with thread_lock:
         if thread is None:
             thread = socketio.start_background_task(target=background_thread)
-    sensor_service = SensorService()
-    sensors = sensor_service.get_list(with_readings=False)
-    print('Socket.io connect')
-    emit('sensors', {'all_sensors': list(sensors.values())})
-    emit_sensors_data(sensor_service, sensors)
 
 def hal_response(data):
     def dthandler(obj):
