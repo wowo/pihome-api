@@ -6,7 +6,8 @@ pymongo==3.0.3
 python-crontab==1.9.3
 redis==3.2.0
 Flask-SocketIO==2.9.6
-eventlet==0.22.1
+eventlet>=0.24.1
 gunicorn
 gevent
 google-cloud-firestore
+requests

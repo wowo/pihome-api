@@ -17,7 +17,7 @@ DATE_FORMAT = '%Y-%m-%d %H:%M'
 class StoringService:
     def __init__(self):
         path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-        self.base_config = yaml.load(open(path))
+        self.base_config = yaml.load(open(path), Loader=yaml.FullLoader)
         self.config = self.base_config['storing']['mongo']
         self.retry_delay = 10 * 1000
 

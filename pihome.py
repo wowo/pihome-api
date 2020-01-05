@@ -19,35 +19,51 @@ from threading import Lock
 
 app = Flask(__name__)
 socketio = SocketIO(app)
-thread = None
-thread_lock = Lock()
+thread_sensors = None
+thread_switches = None
+thread_lock_switches = Lock()
+thread_lock_sensors = Lock()
 
-SENSORS_SLEEP = 3
+SENSORS_SLEEP = 10
+SWITCHES_SLEEP = 10
 sensors_data = {}
+switches_data = {}
 
-def emit_sensors_data(sensor_service, sensors):
-    for key in sensors:
-        data = sensor_service.get_sensor_data(key, with_readings=True)
-        sensors_data[data['key']] = data
-        socketio.emit('sensor', data)
-
-def background_thread():
-    sensor_service = SensorService()
-    sensors = sensor_service.get_list(with_readings=False)
+def emit_sensors():
+    service = SensorService()
+    sensors = service.get_list(with_readings=False)
     while True:
-        emit_sensors_data(sensor_service, sensors)
+        for key in sensors:
+            data = service.get_sensor_data(key, with_readings=True)
+            sensors_data[data['key']] = data
+            socketio.emit('sensor', data, include_self=False)
         socketio.sleep(SENSORS_SLEEP)
+
+def emit_switches():
+    service = SwitchService()
+    while True:
+        for data in service.get_list(True).values():
+            switches_data[data['key']] = data
+            socketio.emit('switch', data, include_self=False)
+        socketio.sleep(SWITCHES_SLEEP)
 
 @socketio.on('connect')
 def on_connect():
-    logging.warning('socket connected. cached: ' + str(len(sensors_data.values())))
+    logging.warning('socket connected. cached sensors: {}, cached switches: {}'.format(len(sensors_data.keys()), len(switches_data.keys())))
     for data in sensors_data.values():
-        socketio.emit('sensor', data)
+        socketio.emit('sensor', data, include_self=False)
 
-    global thread
-    with thread_lock:
-        if thread is None:
-            thread = socketio.start_background_task(target=background_thread)
+    for data in switches_data.values():
+        socketio.emit('switch', data, include_self=False)
+
+    global thread_sensors
+    global thread_switches
+    with thread_lock_sensors:
+        if thread_sensors is None:
+            thread_sensors = socketio.start_background_task(target=emit_sensors)
+    with thread_lock_switches:
+        if thread_switches is None:
+            thread_switches = socketio.start_background_task(target=emit_switches)
 
 def hal_response(data):
     def dthandler(obj):
@@ -68,6 +84,7 @@ def ping():
 
 @app.route('/switch', methods=['get'])
 def switch_list():
+    app.logger.warning('SWITCH get')
     switch = SwitchService()
 
     return hal_response(switch.get_list(request.args.get('fresh', False)))
@@ -75,12 +92,12 @@ def switch_list():
 
 @app.route('/switch/<key>', methods=['PATCH'])
 def switch_toggle(key):
-    app.logger.error('switch toggle %s by %s' % (key,  get_authenticated_user(request)))
-    switch = SwitchService()
     input_data = json.loads(request.data)
+    app.logger.warning('switch toggle %s by %s new state: %s, duration: %s' % (key, get_authenticated_user(request), input_data['state'], input_data['duration'] if 'duration' in input_data else None))
+    switch = SwitchService()
     duration = timedelta(minutes=int(input_data['duration'])) if 'duration' in input_data else None
     data = switch.toggle(key,
-                         input_data['state'],
+                         int(input_data['state']),
                          duration,
                          get_authenticated_user(request))
 
@@ -125,7 +142,7 @@ def cron_list():
     result = []
 
     path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-    config = yaml.load(file(path))['switch']
+    config = yaml.load(file(path), Loader=yaml.FullLoader)['switch']
     for job in cron:
         if job.comment.find('pihome-api') != -1:
             task_data = json.loads(job.comment.replace('pihome-api ', ''))

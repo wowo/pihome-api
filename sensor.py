@@ -9,7 +9,7 @@ import yaml
 class SensorService:
     def __init__(self):
         path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-        self.config = yaml.load(open(path))['sensor']
+        self.config = yaml.load(open(path), Loader=yaml.FullLoader)['sensor']
 
     def get_list(self, with_readings=True):
         sensors = {}

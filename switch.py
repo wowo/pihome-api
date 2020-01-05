@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 from datetime import datetime, timedelta
-import pickle
+import json
 import socket
 from xml.dom.minidom import parseString
 import os
@@ -9,7 +9,7 @@ import re
 import redis
 import subprocess
 import time
-import urllib2
+import requests
 
 from celery import Celery
 import yaml
@@ -18,27 +18,37 @@ from celery.task.control import revoke
 import celeryconfig
 
 import jwt
+import logging
 
+def dthandler(obj):
+    return obj.isoformat() if isinstance(obj, datetime) else None
 
 class SwitchService:
     def __init__(self):
         path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-        self.config = yaml.load(file(path))['switch']
+        self.config = yaml.load(open(path).read(), Loader=yaml.FullLoader)['switch']
         self.cache = redis.StrictRedis(host='localhost', port=6379, db=0)
         self.__schedule = None
         self.__revoked = None
 
     def get_list(self, fresh):
         switches = {}
+        self.__schedule = None
+        self.__revoked = None
+        logging.warning('SWITCH get_list %s' % 'FRESH' if fresh else 'NOT FRESH')
         if not fresh:
             switches = self.cache.hgetall('_switches')
-            switches = {k: pickle.loads(v) for k, v in switches.items()}
+            switches = {k.decode(): json.loads(v) for k, v in switches.items()}
         else:
             self.cache.delete('_switches')
 
         # load remaining switches defined in config but absent in _switches hash Redis entry
         for key in set(self.config['devices'].keys()) - set(switches.keys()):
+            start = time.process_time()
             switches[key] = self.__get_switch(str(key))
+            logging.warning('  %s GET in %.3fs' % (key, time.process_time() - start))
+
+        EthernetSwitch.led_api_cache = None
 
         return switches
 
@@ -46,11 +56,16 @@ class SwitchService:
         return self.__get_switch_driver(device).get_state()
 
     def toggle(self, key, new_state, duration=None, user=None):
+        start = time.process_time()
+        logging.warning('TOGGLE %s' % (key))
         device = self.config['devices'][key]
         driver = self.__get_switch_driver(device)
         driver.set_state(new_state, user)
+        logging.warning('TOGGLE %s set_state %.3f' % (key, time.process_time() - start))
         self.__revoke_scheduled(str(key))
+        logging.warning('TOGGLE %s revoke_scheduled %.3f' % (key, time.process_time() - start))
         self.cache.delete(str(key))
+        logging.warning('TOGGLE %s cache delete %.3f' % (key, time.process_time() - start))
 
         duration = driver.get_duration(new_state) if 'get_duration' in dir(driver) else duration
         if duration is not None:
@@ -59,8 +74,13 @@ class SwitchService:
             toggle_switch.apply_async((key, driver.get_opposite_state(new_state), True), eta=eta)
             self.__schedule = None
             self.__revoked = None
+        logging.warning('TOGGLE %s set duration %.3f' % (key, time.process_time() - start))
 
-        return self.__get_switch(str(key))
+        EthernetSwitch.led_api_cache = None
+        info = self.__get_switch(str(key))
+        logging.warning('TOGGLE %s get info %.3f' % (key, time.process_time() - start))
+
+        return info
 
     def __revoke_scheduled(self, key):
         revoked = self.__get_revoked()
@@ -90,9 +110,10 @@ class SwitchService:
                 'scheduled': scheduled,
                 'stateless': device['stateless'] if 'stateless' in device else False,
                 'durations': device['durations'] if 'durations' in device else False,
+                'icon': device['icon'],
                 'type': device['type']}
 
-        self.cache.hset('_switches', key, pickle.dumps(info))
+        self.cache.hset('_switches', key, json.dumps(info, default=dthandler))
 
         return info
 
@@ -103,16 +124,15 @@ class SwitchService:
         return task_celery
 
     def __get_schedule(self):
-        if self.__schedule is None:
-            try:
-                self.__schedule = self.__get_celery().control.inspect().scheduled()['celery@raspberrypi']
-            except (socket.error, TypeError):
-                self.__schedule = []
+        try:
+            self.__schedule = self.__get_celery().control.inspect().scheduled()['celery@raspberrypi']
+        except (socket.error, TypeError):
+            self.__schedule = []
 
         return self.__schedule
 
     def __get_revoked(self):
-        if self.__revoked is None:
+        if not self.__revoked:
             try:
                 self.__revoked = self.__get_celery().control.inspect().revoked()['celery@raspberrypi']
             except (socket.error, TypeError):
@@ -174,13 +194,15 @@ class AbstractSwitch:
 
 
 class EthernetSwitch(AbstractSwitch):
+    led_api_cache = None
+
     def __init__(self, port_id, subnet, address, cache):
         AbstractSwitch.__init__(self)
         self.port_id = port_id
         self.address = address
         self.subnet = subnet
         self.cache = cache
-        self.ip = self.cache.get('ethernet_ip')
+        self.ip = self.cache.get('ethernet_ip').decode()
 
     def get_state(self):
         state = None
@@ -188,6 +210,7 @@ class EthernetSwitch(AbstractSwitch):
             state = self.get_state_for_ips([self.ip])
 
         if not state:
+            logging.warning('    Getting for all ips')
             state = self.get_state_for_ips(self.get_alive_ips(self.subnet))
 
         return state
@@ -199,7 +222,8 @@ class EthernetSwitch(AbstractSwitch):
                 node_name = 'led' + str(self.address)
 
                 return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
-            except urllib2.URLError:
+            except Exception as err:
+                logging.error('get_state error for IP %s: %s' %(ip, err))
                 pass
 
         return None
@@ -208,22 +232,37 @@ class EthernetSwitch(AbstractSwitch):
     def get_alive_ips(subnet):
         nmap = subprocess.check_output('nmap -sP ' + subnet, shell=True)
 
-        return re.findall('for ([0-9\.]+)', nmap)
+        return re.findall('for ([0-9\.]+)', nmap.decode())
 
     def get_status_xml(self, ip):
-        status_xml = urllib2.urlopen('http://%s/status.xml' % ip).read()
+        if self.__class__.led_api_cache is not None:
+            logging.warning('    LEDs status from cache ' + self.__class__.led_api_cache)
+            return parseString(self.__class__.led_api_cache)
+
+        status_xml = requests.get('http://%s/status.xml' % ip)
+        if status_xml.status_code is not 200:
+            raise Exception('Got %s with %s from LEDs API' % (status_xml.status_code, status_xml.text))
         self.ip = ip
         self.cache.setex('ethernet_ip', 60 * 60 * 24 * 7, self.ip)  # cache for 7 days
 
-        return parseString(status_xml)
+        self.__class__.led_api_cache = status_xml.text
+
+        return parseString(status_xml.text)
 
     def set_state(self, new_state, user):
+        self.__class__.led_api_cache = None
+        start = time.process_time()
+        logging.warning('SET STATE %s to: %s' % (self.address, new_state))
         current_state = self.get_state()
+        logging.warning('  > SET STATE %s get current %.3fs' % (self.address, time.process_time() - start))
         if int(current_state) != int(new_state):
             address = 'http://%s/leds.cgi?led=%s' % (self.ip, str(self.address))
-            urllib2.urlopen(address).read()
+            requests.get(address)
+            logging.warning('  > SET STATE %s request %.3fs' % (self.address, time.process_time() - start))
             from tasks import notify_state_change
+            logging.warning('  > SET STATE %s import tasks %.3fs' % (self.address, time.process_time() - start))
             notify_state_change.apply_async((self.port_id, new_state, user))
+            logging.warning('  > SET STATE %s notify %.3fs' % (self.address, time.process_time() - start))
 
 
 class RaspberrySwitch(AbstractSwitch):
@@ -315,7 +354,7 @@ class AggregateSwitch(AbstractSwitch):
     def set_state(self, new_state, user):
         for switch in self.switches:
             switch.set_state(new_state, user)
-	    self.cache.delete('_switches')
+            self.cache.delete('_switches')
 
     def get_duration(self, new_state):
         durations = []
