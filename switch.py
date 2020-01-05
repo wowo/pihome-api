@@ -35,7 +35,7 @@ class SwitchService:
         switches = {}
         self.__schedule = None
         self.__revoked = None
-        logging.warning('SWITCH get_list %s' % 'FRESH' if fresh else 'NOT FRESH')
+        logging.warning('SWITCH get_list %s' % 'FRESH' if fresh else 'CACHED')
         if not fresh:
             switches = self.cache.hgetall('_switches')
             switches = {k.decode(): json.loads(v) for k, v in switches.items()}
@@ -57,6 +57,9 @@ class SwitchService:
 
     def toggle(self, key, new_state, duration=None, user=None):
         start = time.process_time()
+        if not self.__can_set_duration_for_off(key, new_state):
+            logging.warning('Can not set duration for state 0 for %s' % (key))
+            duration = None
         logging.warning('TOGGLE %s' % (key))
         device = self.config['devices'][key]
         driver = self.__get_switch_driver(device)
@@ -64,8 +67,6 @@ class SwitchService:
         logging.warning('TOGGLE %s set_state %.3f' % (key, time.process_time() - start))
         self.__revoke_scheduled(str(key))
         logging.warning('TOGGLE %s revoke_scheduled %.3f' % (key, time.process_time() - start))
-        self.cache.delete(str(key))
-        logging.warning('TOGGLE %s cache delete %.3f' % (key, time.process_time() - start))
 
         duration = driver.get_duration(new_state) if 'get_duration' in dir(driver) else duration
         if duration is not None:
@@ -175,6 +176,19 @@ class SwitchService:
         else:
             raise RuntimeError('Unknown switch driver ' + params['type'])
 
+    def __can_set_duration_for_off(self, key, new_state):
+        if int(new_state) == 1:
+            return True
+
+        device = self.config['devices'][key]
+        if not 'durations' in device:
+            return False
+
+        try:
+            return True if device['durations'].index('X') > -1 else False
+        except ValueError:
+            return False
+
 
 class AbstractSwitch:
     def __init__(self):
@@ -210,7 +224,6 @@ class EthernetSwitch(AbstractSwitch):
             state = self.get_state_for_ips([self.ip])
 
         if not state:
-            logging.warning('    Getting for all ips')
             state = self.get_state_for_ips(self.get_alive_ips(self.subnet))
 
         return state
@@ -251,18 +264,12 @@ class EthernetSwitch(AbstractSwitch):
 
     def set_state(self, new_state, user):
         self.__class__.led_api_cache = None
-        start = time.process_time()
-        logging.warning('SET STATE %s to: %s' % (self.address, new_state))
         current_state = self.get_state()
-        logging.warning('  > SET STATE %s get current %.3fs' % (self.address, time.process_time() - start))
         if int(current_state) != int(new_state):
             address = 'http://%s/leds.cgi?led=%s' % (self.ip, str(self.address))
             requests.get(address)
-            logging.warning('  > SET STATE %s request %.3fs' % (self.address, time.process_time() - start))
             from tasks import notify_state_change
-            logging.warning('  > SET STATE %s import tasks %.3fs' % (self.address, time.process_time() - start))
             notify_state_change.apply_async((self.port_id, new_state, user))
-            logging.warning('  > SET STATE %s notify %.3fs' % (self.address, time.process_time() - start))
 
 
 class RaspberrySwitch(AbstractSwitch):
