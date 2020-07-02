@@ -58,7 +58,7 @@ class SwitchService:
         return self.__get_switch_driver(device).get_state()
 
     def toggle(self, key, new_state, duration=None, user=None):
-        start = time.process_time()
+        start = timeit.default_timer()
         if not self.__can_set_duration_for_off(key, new_state):
             logging.warning('Can not set duration for state 0 for %s' % (key))
             duration = None
@@ -66,9 +66,9 @@ class SwitchService:
         device = self.config['devices'][key]
         driver = self.__get_switch_driver(device)
         driver.set_state(new_state, user)
-        logging.warning('TOGGLE %s set_state %.3f' % (key, time.process_time() - start))
+        logging.warning('TOGGLE %s set_state %.3f' % (key, timeit.default_timer() - start))
         self.__revoke_scheduled(str(key))
-        logging.warning('TOGGLE %s revoke_scheduled %.3f' % (key, time.process_time() - start))
+        logging.warning('TOGGLE %s revoke_scheduled %.3f' % (key, timeit.default_timer() - start))
 
         duration = driver.get_duration(new_state) if 'get_duration' in dir(driver) else duration
         if duration is not None:
@@ -77,11 +77,11 @@ class SwitchService:
             toggle_switch.apply_async((key, driver.get_opposite_state(new_state), True), eta=eta)
             self.__schedule = None
             self.__revoked = None
-        logging.warning('TOGGLE %s set duration %.3f' % (key, time.process_time() - start))
+        logging.warning('TOGGLE %s set duration %.3f' % (key, timeit.default_timer() - start))
 
         EthernetSwitch.led_api_cache = None
         info = self.__get_switch(str(key))
-        logging.warning('TOGGLE %s get info %.3f' % (key, time.process_time() - start))
+        logging.warning('TOGGLE %s get info %.3f' % (key, timeit.default_timer() - start))
 
         return info
 
@@ -169,6 +169,7 @@ class SwitchService:
             return ClickSwitch(
                 params['id'],
                 params['pin'],
+                params['busy_delay'] if 'busy_delay' in params else None
             )
         elif 'raspberry' == params['type']:
             return RaspberrySwitch(params['pin'])
@@ -338,21 +339,32 @@ class TwoWaySwitch(AbstractSwitch):
 
 
 class ClickSwitch(AbstractSwitch):
-    def __init__(self, switch_id, pin):
+    def __init__(self, switch_id, pin, busy_delay):
         AbstractSwitch.__init__(self)
         self.switch_id = switch_id  # type: str
         self.pin = pin  # type: int
+        self.busy_delay = busy_delay
         os.system('gpio mode %s out' % str(self.pin))
 
     def get_state(self):
         return 0
 
     def set_state(self, new_state, user):
+        start = timeit.default_timer()
         os.system('gpio write %s 1' % (str(self.pin)))
         time.sleep(0.5)
         os.system('gpio write %s 0' % (str(self.pin)))
         from tasks import notify_state_change
         notify_state_change.apply_async((self.switch_id, 'click', user))
+        if self.busy_delay is not None:
+            logging.warning('execution so far %.3fs' % (timeit.default_timer() - start))
+            busy_delay_effective = self.busy_delay - int(timeit.default_timer() - start)
+            logging.warning(
+                'Busy delay %s is %.1fs, setting delay to %.1fs' % (
+                    self.switch_id,
+                    self.busy_delay,
+                    busy_delay_effective))
+            time.sleep(busy_delay_effective)
 
 
 class AggregateSwitch(AbstractSwitch):
