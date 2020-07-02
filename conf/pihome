@@ -12,6 +12,7 @@ server {
         include proxy_params;
         proxy_pass http://127.0.0.1:5005;
 	proxy_redirect off;
+	# add_header Access-Control-Allow-Origin *;
     }
 
     location / {
@@ -26,6 +27,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "Upgrade";
         proxy_pass http://127.0.0.1:5005/socket.io;
+	# add_header Access-Control-Allow-Origin *;
     }
 }
 

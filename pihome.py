@@ -16,6 +16,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from flask_socketio import SocketIO, join_room, emit
 from threading import Lock
+import timeit
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -29,26 +30,29 @@ SWITCHES_SLEEP = 10
 sensors_data = {}
 switches_data = {}
 
-def emit_sensors():
-    service = SensorService()
-    sensors = service.get_list(with_readings=False)
-    while True:
-        for key in sensors:
-            data = service.get_sensor_data(key, with_readings=True)
-            sensors_data[data['key']] = data
-            socketio.emit('sensor', data, include_self=False)
-        socketio.sleep(SENSORS_SLEEP)
+def emit_sensors(sid):
+    with app.test_request_context():
+        service = SensorService()
+        sensors = service.get_list(with_readings=False)
+        while True:
+            for key in sensors:
+                data = service.get_sensor_data(key, with_readings=True)
+                sensors_data[data['key']] = data
+                socketio.emit('sensor', data, include_self=False, skip_sid=2)
+            socketio.sleep(SENSORS_SLEEP)
 
-def emit_switches():
-    service = SwitchService()
-    while True:
-        for data in service.get_list(True).values():
-            switches_data[data['key']] = data
-            socketio.emit('switch', data, include_self=False)
-        socketio.sleep(SWITCHES_SLEEP)
+def emit_switches(sid):
+    with app.test_request_context():
+        service = SwitchService()
+        while True:
+            for data in service.get_list(True).values():
+                switches_data[data['key']] = data
+                socketio.emit('switch', data, include_self=False, skip_sid=2)
+            socketio.sleep(SWITCHES_SLEEP)
 
 @socketio.on('connect')
 def on_connect():
+    print('Socket connected')
     logging.warning('socket connected. cached sensors: {}, cached switches: {}'.format(len(sensors_data.keys()), len(switches_data.keys())))
     for data in sensors_data.values():
         socketio.emit('sensor', data, include_self=False)
@@ -84,10 +88,13 @@ def ping():
 
 @app.route('/switch', methods=['get'])
 def switch_list():
-    app.logger.warning('SWITCH get')
+    logging.warning('/switch starting') 
+    start_main = timeit.default_timer()
     switch = SwitchService()
+    res = hal_response(switch.get_list(request.args.get('fresh', False)))
+    logging.warning('/switch endpoint %.3fs' % (timeit.default_timer() - start_main))
 
-    return hal_response(switch.get_list(request.args.get('fresh', False)))
+    return res
 
 
 @app.route('/switch/<key>', methods=['PATCH'])
@@ -96,8 +103,13 @@ def switch_toggle(key):
     app.logger.warning('switch toggle %s by %s new state: %s, duration: %s' % (key, get_authenticated_user(request), input_data['state'], input_data['duration'] if 'duration' in input_data else None))
     switch = SwitchService()
     duration = timedelta(minutes=int(input_data['duration'])) if 'duration' in input_data else None
+    try:
+        state = int(input_data['state'])
+    except ValueError:
+        state = input_data['state']
+
     data = switch.toggle(key,
-                         int(input_data['state']),
+                         state,
                          duration,
                          get_authenticated_user(request))
 
@@ -142,7 +154,7 @@ def cron_list():
     result = []
 
     path = os.path.dirname(os.path.realpath(__file__)) + '/config.yml'
-    config = yaml.load(file(path), Loader=yaml.FullLoader)['switch']
+    config = yaml.load(open(path).read(), Loader=yaml.FullLoader)['switch']
     for job in cron:
         if job.comment.find('pihome-api') != -1:
             task_data = json.loads(job.comment.replace('pihome-api ', ''))
@@ -231,22 +243,6 @@ def cron_delete(cron_id):
             cron.write()
 
     return ''
-
-
-@app.after_request
-def add_cors(resp):
-    """ Ensure all responses have the CORS headers.
-        This ensures any failures are also accessible by the client. """
-    origin = request.headers.get('Origin', '*')
-    auth = request.headers.get('Access-Control-Request-Headers',
-                               'Authorization')
-    resp.headers['Access-Control-Allow-Origin'] = origin
-    resp.headers['Access-Control-Allow-Credentials'] = 'true'
-    resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET, PATCH, PUT, DELETE'
-    resp.headers['Access-Control-Allow-Headers'] = auth
-
-    return resp
-
 
 
 if __name__ != 'pihome-api':  # wsgi

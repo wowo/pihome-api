@@ -8,6 +8,7 @@ import os
 import re
 import redis
 import subprocess
+import timeit
 import time
 import requests
 
@@ -19,6 +20,8 @@ import celeryconfig
 
 import jwt
 import logging
+
+from pprint import pformat
 
 def dthandler(obj):
     return obj.isoformat() if isinstance(obj, datetime) else None
@@ -35,7 +38,6 @@ class SwitchService:
         switches = {}
         self.__schedule = None
         self.__revoked = None
-        logging.warning('SWITCH get_list %s' % 'FRESH' if fresh else 'CACHED')
         if not fresh:
             switches = self.cache.hgetall('_switches')
             switches = {k.decode(): json.loads(v) for k, v in switches.items()}
@@ -44,9 +46,9 @@ class SwitchService:
 
         # load remaining switches defined in config but absent in _switches hash Redis entry
         for key in set(self.config['devices'].keys()) - set(switches.keys()):
-            start = time.process_time()
+            start = timeit.default_timer()
             switches[key] = self.__get_switch(str(key))
-            logging.warning('  %s GET in %.3fs' % (key, time.process_time() - start))
+            logging.warning('  %s GET in %.3fs' % (key, timeit.default_timer() - start))
 
         EthernetSwitch.led_api_cache = None
 
@@ -88,6 +90,7 @@ class SwitchService:
         for entry in self.__get_schedule():
             args = eval(entry['request']['args'])
             if args[0] == key and args[2] and entry['request']['id'] not in revoked:
+                logging.warning('revoking ' + key)
                 revoke(entry['request']['id'], Terminate=True)
                 self.__schedule = None
                 self.__revoked = None
@@ -103,7 +106,7 @@ class SwitchService:
                 if args[0] == key and entry['request']['id'] not in revoked:
                     scheduled = {'when': entry['eta'], 'state': args[1]}
                     break
-
+        state = self.get_state(device)
         info = {'key': key,
                 'name': device['name'],
                 'state': self.get_state(device),
@@ -125,15 +128,16 @@ class SwitchService:
         return task_celery
 
     def __get_schedule(self):
-        try:
-            self.__schedule = self.__get_celery().control.inspect().scheduled()['celery@raspberrypi']
-        except (socket.error, TypeError):
-            self.__schedule = []
+        if self.__schedule is None:
+            try:
+                self.__schedule = self.__get_celery().control.inspect().scheduled()['celery@raspberrypi']
+            except (socket.error, TypeError):
+                self.__schedule = []
 
         return self.__schedule
 
     def __get_revoked(self):
-        if not self.__revoked:
+        if self.__revoked is None:
             try:
                 self.__revoked = self.__get_celery().control.inspect().revoked()['celery@raspberrypi']
             except (socket.error, TypeError):
@@ -177,7 +181,10 @@ class SwitchService:
             raise RuntimeError('Unknown switch driver ' + params['type'])
 
     def __can_set_duration_for_off(self, key, new_state):
-        if int(new_state) == 1:
+        try:
+            if int(new_state) == 1:
+                return True
+        except ValueError: # up/down
             return True
 
         device = self.config['devices'][key]
@@ -233,7 +240,6 @@ class EthernetSwitch(AbstractSwitch):
             try:
                 xml = self.get_status_xml(ip)
                 node_name = 'led' + str(self.address)
-
                 return xml.getElementsByTagName(node_name)[0].firstChild.nodeValue
             except Exception as err:
                 logging.error('get_state error for IP %s: %s' %(ip, err))
@@ -243,14 +249,14 @@ class EthernetSwitch(AbstractSwitch):
 
     @staticmethod
     def get_alive_ips(subnet):
+        logging.warning('get_alive_ips!!!!!!!')
         nmap = subprocess.check_output('nmap -sP ' + subnet, shell=True)
 
         return re.findall('for ([0-9\.]+)', nmap.decode())
 
     def get_status_xml(self, ip):
         if self.__class__.led_api_cache is not None:
-            logging.warning('    LEDs status from cache ' + self.__class__.led_api_cache)
-            return parseString(self.__class__.led_api_cache)
+            return self.__class__.led_api_cache
 
         status_xml = requests.get('http://%s/status.xml' % ip)
         if status_xml.status_code is not 200:
@@ -258,9 +264,9 @@ class EthernetSwitch(AbstractSwitch):
         self.ip = ip
         self.cache.setex('ethernet_ip', 60 * 60 * 24 * 7, self.ip)  # cache for 7 days
 
-        self.__class__.led_api_cache = status_xml.text
+        self.__class__.led_api_cache = parseString(status_xml.text)
 
-        return parseString(status_xml.text)
+        return self.__class__.led_api_cache
 
     def set_state(self, new_state, user):
         self.__class__.led_api_cache = None
@@ -366,9 +372,10 @@ class AggregateSwitch(AbstractSwitch):
     def get_duration(self, new_state):
         durations = []
         for switch in self.switches:
-            durations.append(switch.get_duration(new_state) if 'get_duration' in dir(switch) else None)
+            if 'get_duration' in dir(switch):
+                durations.append(switch.get_duration(new_state))
 
-        return max(durations)
+        return max(durations) if len(durations) > 0 else None
 
     def get_opposite_state(self, new_state):
         return 'stop'
