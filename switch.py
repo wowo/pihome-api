@@ -159,11 +159,23 @@ class SwitchService:
                                   self.config['ethernet']['subnet'],
                                   params['address'],
                                   self.cache)
-        elif 'two_way' == params['type']:
+        elif 'two_way' == params['type'] and 'rpi' == params['backend']:
             return TwoWaySwitch(
                 params['id'],
                 RaspberrySwitch(params['up_pin']),
                 RaspberrySwitch(params['down_pin']),
+                params['seconds'])
+        elif 'two_way' == params['type'] and 'ethernet' == params['backend']:
+            return TwoWaySwitch(
+                params['id'],
+                EthernetSwitch(params['id'],
+                                  self.config['ethernet']['subnet'],
+                                  params['up_pin'],
+                                  self.cache),
+                EthernetSwitch(params['id'],
+                                  self.config['ethernet']['subnet'],
+                                  params['down_pin'],
+                                  self.cache),
                 params['seconds'])
         elif 'click' == params['type']:
             return ClickSwitch(
@@ -228,6 +240,7 @@ class EthernetSwitch(AbstractSwitch):
 
     def get_state(self):
         state = None
+        logging.warning('ip  ' + self.ip)
         if self.ip:
             state = self.get_state_for_ips([self.ip])
 
