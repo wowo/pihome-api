@@ -85,9 +85,9 @@ class MqttThermometer:
             return 'n/a'
 
         return {
-            'value': data['payload']['temperature'],
+            'value': round(data['payload']['temperature'], 1),
             'linkquality': data['payload']['linkquality'],
             'battery': data['payload']['battery'],
-            'humidity': data['payload']['humidity'],
+            'humidity': round(data['payload']['humidity']),
             'when': str(datetime.fromtimestamp(data['tst']))
         }
