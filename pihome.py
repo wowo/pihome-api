@@ -120,7 +120,7 @@ def switch_toggle(key):
 def sensor_list():
     sensor = SensorService()
 
-    return hal_response(sensor.get_list())
+    return hal_response(sensor.get_list(from_cache=True))
 
 
 @app.route('/reading', methods=['GET'])
@@ -255,3 +255,7 @@ if __name__ != 'pihome-api':  # wsgi
         print('> Store sensors state ' + datetime.now().strftime('%Y-%m-%d %H:%M'))
         service = StoringService()
         service.store_sensors_state()
+    elif len(sys.argv) > 1 and sys.argv[1] == '--cache-sensors':
+        print('> Caching sensors state ' + datetime.now().strftime('%Y-%m-%d %H:%M'))
+        service = StoringService()
+        service.cache_sensors_state()

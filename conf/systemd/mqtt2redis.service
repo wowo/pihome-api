@@ -1,0 +1,14 @@
+[Unit]
+Description=mqtt2redis
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/mqtt2redis.py zigbee2mqtt/0x00124b0022cd3f17 mqtt_outdoor_sonof
+WorkingDirectory=/tmp
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target

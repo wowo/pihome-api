@@ -1,0 +1,15 @@
+[Unit]
+Description=celery_pihome
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/celery worker -A tasks --loglevel=INFO
+WorkingDirectory=/var/www/pihome-api/
+Environment="PYTHONPATH=/var/www/pihome-api/"
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target

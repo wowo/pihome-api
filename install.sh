@@ -26,24 +26,10 @@ sudo service dhcpcd restart
 # scp -r ~/Development/pihome/dist/* pi@192.168.254.9:/var/www/pihome
 
 ### packages
-sudo apt install -y nginx git byobu redis vim npm multitail nmap supervisor libdata-validate-ip-perl
+sudo apt install -y nginx git byobu redis vim npm multitail nmap libdata-validate-ip-perl
 
 ### byobu
 byobu-enable
-
-### apache 
-#sudo mv python.wsgi.conf /etc/apache2/sites-available/
-#sudo a2ensite python.wsgi.conf
-#sudo a2enmod ssl
-#sudo service apache2 restart
-### nginx
-sudo cp python /etc/nginx/sites-enabled/
-sudo cp gunicorn.service /etc/systemd/system/
-sudo service gunicorn start
-sudo systemctl enable gunicorn
-
-sudo mkdir /var/www/pihome-api /var/www/pihome
-sudo chown pi:pi pihome*
 
 ### pihome-api
 cd /var/www/pihome-api
@@ -52,9 +38,30 @@ mv ~/config.yml /var/www/pihome-api/
 mv ~/htpasswd /var/www/pihome-api/
 pip install -r requirements.txt
 echo '*/10 * * * * pi cd /var/www/pihome-api/ && /usr/bin/python pihome.py --store-sensors | tee -a /tmp/cron.log' | sudo tee -a /etc/crontab
+echo '* * * * * pi cd /var/www/pihome-api/ && /usr/bin/python pihome.py --cache-sensors | tee -a /tmp/cron.log' | sudo tee -a /etc/crontab
 sudo ln -s /home/pi/.local/bin/celery /usr/local/bin/celery
-sudo mv ~/supervisord.conf /etc/supervisor/
-sudo service  supervisor restart
+
+sudo mkdir /var/www/pihome-api /var/www/pihome
+sudo chown pi:pi pihome*
+
+sudo ln -s /var/www/pihome-api/mqtt2redis.py /usr/local/bin/mqtt2redis.py
+sudo ln -s /var/www/pihome-api/conf/systemd/gunicorn.service /etc/systemd/system/gunicorn.service
+sudo ln -s /var/www/pihome-api/conf/systemd/celery_pihome.service /etc/systemd/system/celery_pihome.service
+sudo ln -s /var/www/pihome-api/conf/systemd/zigbee2mqtt.service /etc/systemd/system/zigbee2mqtt.service
+sudo ln -s /var/www/pihome-api/conf/systemd/mqtt2redis.service /etc/systemd/system/mqtt2redis.service
+
+sudo systemctl enable zigbee2mqtt.service
+sudo systemctl enable mqtt2redis.service
+sudo systemctl enable celery_pihome.service
+sudo systemctl enable gunicorn.service
+
+sudo service zigbee2mqtt start
+sudo service mqtt2redis start
+sudo service celery_pihome start
+sudo service gunicorn start
+
+sudo ln -s /var/www/pihome-api/conf/conf/python.wsgi.conf /etc/nginx/sites-enabled/python
+sudo service nginx restart
 
 ### gpio
 sudo modprobe w1-gpio

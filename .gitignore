@@ -59,3 +59,4 @@ target/
 
 config.yml
 htpasswd
+venv

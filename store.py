@@ -9,6 +9,9 @@ import traceback
 from pymongo import MongoClient
 import yaml
 
+import redis
+import json
+
 from sensor import SensorService
 
 DATE_FORMAT = '%Y-%m-%d %H:%M'
@@ -84,6 +87,31 @@ class StoringService:
                 'sensors': data
             })
             self.conn.close()
+        except Exception as e:
+            print("\t%s occured with: %s" % (type(e), e))
+            traceback.print_exc()
+
+    def cache_sensors_state(self):
+        try:
+            data = {}
+            sensor = SensorService()
+            sensors = sensor.get_list()
+            redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
+
+            for key in sensors:
+                if sensors[key]['type'] != 'w1thermometer':
+                    continue
+                print('> caching %.2f for sensor %s' % (sensors[key]['value'], sensors[key]['key']))
+                redis_key = 'w1thermometer_' + sensors[key]['address']
+                data = {
+                    'value': sensors[key]['value'],
+                    'linkquality': None,
+                    'battery': None,
+                    'humidity': None,
+                    'when': str(datetime.now())
+                }
+                redis_client.lpush(redis_key, json.dumps(data))
+                redis_client.ltrim(redis_key, 0, 50)
         except Exception as e:
             print("\t%s occured with: %s" % (type(e), e))
             traceback.print_exc()
