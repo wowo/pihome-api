@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from pymongo import MongoClient
 
 class AbstractDumper(ABC):
-    def get_logger(self):
+    @staticmethod
+    def get_logger():
         root = logging.getLogger()
         root.setLevel(logging.DEBUG)
 
@@ -19,7 +20,8 @@ class AbstractDumper(ABC):
         return root
 
 
-    def get_db(self):
+    @staticmethod
+    def get_db():
         with open(os.path.dirname(os.path.realpath(__file__)) + '/../../config.yml', 'r') as file:
             config = yaml.safe_load(file)['storing']['mongo']
         conn = MongoClient(config['host'], config['port'])
