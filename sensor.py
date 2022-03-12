@@ -28,6 +28,7 @@ class SensorService:
             'address': device['address'],
             'name': device['name'],
             'type': device['type'],
+            'collection': device['collection']
         }
         if with_readings:
             sensor.update(self.get_value(device, from_cache))

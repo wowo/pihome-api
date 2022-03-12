@@ -75,17 +75,24 @@ class StoringService:
             sensor = SensorService()
             sensors = sensor.get_list()
             for key in sensors:
-                print('> store %.2f for sensor %s' % (sensors[key]['value'], sensors[key]['key']))
-                data[sensors[key]['address']] = {
-                    'temperature':  sensors[key]['value'],
+                collection = sensors[key]['collection']
+                print('> store [collection: %s, key %s] %.2f for sensor %s' % (collection, key, sensors[key]['value'], sensors[key]['key']))
+                value_key = 'value' if collection != 'temperatures' else 'temperature'
+                if collection not in data:
+                    data[collection] = {}
+                data[collection][sensors[key]['address']] = {
+                    # value_key:  sensors[key]['value'],
                     'id': key,
-                    'name': sensors[key]['name']
+                    'name': sensors[key]['name'],
+                    value_key: sensors[key]['value'],
+
                 }
 
-            self.__get_db().temperatures.insert({
-                'date': datetime.now(),
-                'sensors': data
-            })
+            for collection in data:
+                self.__get_db()[collection].insert({
+                    'date': datetime.now(),
+                    'sensors': data[collection]
+                })
             self.conn.close()
         except Exception as e:
             print("\t%s occured with: %s" % (type(e), e))
