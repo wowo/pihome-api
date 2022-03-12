@@ -44,16 +44,30 @@ class SensorService:
         if 'w1thermometer' == params['type']:
             return W1Thermometer(self.config['w1thermometer']['base_path'],
                                  params['address'])
-        if 'mqtt' == params['type']:
+        if 'mqtt_temperature' == params['type']:
             return MqttThermometer(params['address'])
+        if 'mqtt_light' == params['type']:
+            return MqttLight(params['address'])
         else:
             raise RuntimeError('Unknown sensor driver')
 
 
-class CachedThermometer(object):
+class CachedSensor(object):
     def __init__(self, cache_key):
         self.cache_key = cache_key
         self.redis = redis.StrictRedis(host='localhost', port=6379, db=0)
+
+    def get_unit(self):
+        return ''
+
+    def get_respose_from_data(self, data):
+        return {
+            'value': round(data['value'], 1),
+            'linkquality': data['linkquality'] if 'linkquality' in data else 0,
+            'battery': data['battery'] if 'battery' in data else 0,
+            'unit': self.get_unit(),
+            'when': data['when']
+        }
 
     def get_from_cache(self):
         json_text = self.redis.lrange(self.cache_key, 0, 0)
@@ -64,22 +78,18 @@ class CachedThermometer(object):
                 'value': 'n/a',
                 'when': str(datetime.fromtimestamp(data['when']))
             }
+        return self.get_respose_from_data(data)
 
 
-        return {
-            'value': round(data['value'], 1),
-            'linkquality': data['linkquality'],
-            'battery': data['battery'],
-            'humidity': round(data['humidity']) if data['humidity'] else None,
-            'when': data['when']
-        }
 
-
-class W1Thermometer(CachedThermometer):
+class W1Thermometer(CachedSensor):
     def __init__(self, base_path, address):
         self.address = address
         self.base_path = base_path
-        CachedThermometer.__init__(self, 'w1thermometer_' + address)
+        CachedSensor.__init__(self, 'w1thermometer_' + address)
+
+    def get_unit(self):
+        return u'\N{DEGREE SIGN}C'
 
     def get_value(self):
         if not os.path.exists(self.base_path + self.address):
@@ -95,6 +105,7 @@ class W1Thermometer(CachedThermometer):
 
         return {
             'value': temperature,
+            'unit': self.get_unit(),
             'linkquality': None,
             'battery': None,
             'humidity': None,
@@ -104,12 +115,39 @@ class W1Thermometer(CachedThermometer):
     def get_cached_value(self):
         return self.get_from_cache()
 
-class MqttThermometer(CachedThermometer):
+class MqttThermometer(CachedSensor):
     def __init__(self, address):
-        CachedThermometer.__init__(self, address)
+        CachedSensor.__init__(self, address)
 
     def get_cached_value(self):
         return self.get_from_cache()
 
     def get_value(self):
         return self.get_from_cache()
+
+    def get_unit(self):
+        return u'\N{DEGREE SIGN}C'
+
+    def get_respose_from_data(self, data):
+        response  = super().get_respose_from_data(data)
+        response['humidity'] =  data['humidity'] if 'humidity' in data else 0
+        return response
+
+class MqttLight(CachedSensor):
+    def __init__(self, address):
+        CachedSensor.__init__(self, address)
+
+    def get_cached_value(self):
+        return self.get_from_cache()
+
+    def get_value(self):
+        return self.get_from_cache()
+
+    def get_unit(self):
+        return ' lx'
+
+    def get_respose_from_data(self, data):
+        response  = super().get_respose_from_data(data)
+        response['illuminance'] =  data['illuminance'] if 'illuminance' in data else 0
+        response['illuminance_lux'] =  data['illuminance_lux'] if 'illuminance_lux' in data else 0
+        return response

@@ -244,6 +244,11 @@ def cron_delete(cron_id):
 
     return ''
 
+@app.route('/front-config', methods=['GET'])
+def front_config():
+    config = json.loads(open('front-config.json', 'r').read())
+    return jsonify(config)
+
 
 if __name__ != 'pihome-api':  # wsgi
     if __name__ == "__main__" and len(sys.argv) == 1:
