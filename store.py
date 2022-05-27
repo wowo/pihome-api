@@ -44,21 +44,23 @@ class StoringService:
         return events
 
     def get_reading_list(self, since, until=None):
-        criteria = {'date': {'$gte': since}}
-        if until:
-            criteria['date']['$lte'] = until
+        result = {}
+        for collection in ['light', 'temperatures']:
+            logging.warning('collection ' + collection)
+            key = 'temperature' if collection == 'temperatures' else 'value'
+            criteria = {'date': {'$gte': since}}
+            if until:
+                criteria['date']['$lte'] = until
 
-        data = []
-        iterator = self.__get_db().temperatures.find(criteria).sort('date', -1)
-        for document in iterator:
-            row = {'x': document['date'].strftime(DATE_FORMAT)}
-            for address in document['sensors']:
-                if document['sensors'][address]['temperature'] < 85:
-                    id = document['sensors'][address]['id']
-                    row[id] = document['sensors'][address]['temperature']
-            data.append(row)
+            iterator = self.__get_db()[collection].find(criteria).sort('date', -1)
+            for document in iterator:
+                date = document['date'].strftime(DATE_FORMAT)
+                if not date in result:
+                    result[date] = {'x': date}
+                for address in document['sensors']:
+                    result[date][document['sensors'][address]['id']] = document['sensors'][address][key]
 
-        return data
+        return list(result.values())
 
     def store_switch_state(self, sensor_key, new_state, date, user):
         self.__get_db().switches.insert({
