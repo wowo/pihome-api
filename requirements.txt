@@ -4,7 +4,7 @@ celery==4.1.1
 pika==0.9.14
 pymongo==3.0.3
 python-crontab==1.9.3
-redis==3.2.0
+redis==4.5.3
 Flask-SocketIO==2.9.6
 eventlet>=0.24.1
 gunicorn
