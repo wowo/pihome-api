@@ -22,6 +22,7 @@ import jwt
 import logging
 
 from pprint import pformat
+from collections import OrderedDict
 
 def dthandler(obj):
     return obj.isoformat() if isinstance(obj, datetime) else None
@@ -52,7 +53,7 @@ class SwitchService:
 
         EthernetSwitch.led_api_cache = None
 
-        return switches
+        return OrderedDict(sorted(switches.items()))
 
     def get_state(self, device):
         return self.__get_switch_driver(device).get_state()
@@ -115,6 +116,7 @@ class SwitchService:
                 'stateless': device['stateless'] if 'stateless' in device else False,
                 'durations': device['durations'] if 'durations' in device else False,
                 'icon': device['icon'],
+                'group': device['group'],
                 'type': device['type']}
 
         self.cache.hset('_switches', key, json.dumps(info, default=dthandler))

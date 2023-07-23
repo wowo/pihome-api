@@ -7,6 +7,7 @@ import os
 import re
 import redis
 import yaml
+from collections import OrderedDict
 
 
 class SensorService:
@@ -19,7 +20,7 @@ class SensorService:
         for key in self.config['devices']:
             sensors[key] = self.get_sensor_data(key, with_readings, from_cache)
 
-        return sensors
+        return OrderedDict(sorted(sensors.items()))
 
     def get_sensor_data(self, key, with_readings=True, from_cache=False):
         device = self.config['devices'][key]
