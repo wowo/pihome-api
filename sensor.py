@@ -17,7 +17,7 @@ class SensorService:
 
     def get_list(self, with_readings=True, from_cache=False):
         sensors = {}
-        for key in self.config['devices']:
+        for key in self.config['devices'] or []:
             sensors[key] = self.get_sensor_data(key, with_readings, from_cache)
 
         return OrderedDict(sorted(sensors.items()))
