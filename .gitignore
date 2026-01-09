@@ -60,3 +60,4 @@ target/
 config.yml
 htpasswd
 venv
+.ipynb_checkpoints/
