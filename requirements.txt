@@ -11,3 +11,5 @@ gunicorn
 gevent
 google-cloud-firestore
 requests
+PyJWT[crypto]>=2.8.0
+cryptography

@@ -11,12 +11,12 @@ import dateutil.parser
 import json
 import sys
 import uuid
-import jwt
 import logging
 from logging.handlers import RotatingFileHandler
 from flask_socketio import SocketIO, join_room, emit
 from threading import Lock
 import timeit
+from auth_supabase import get_authenticated_user, require_auth
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -99,6 +99,9 @@ def switch_list():
 
 @app.route('/switch/<key>', methods=['PATCH'])
 def switch_toggle(key):
+    ok, err = require_auth(request)
+    if not ok:
+        return Response(response=err[0], status=err[1])
     input_data = json.loads(request.data)
     app.logger.warning('switch toggle %s by %s new state: %s, duration: %s' % (key, get_authenticated_user(request), input_data['state'], input_data['duration'] if 'duration' in input_data else None))
     switch = SwitchService()
@@ -125,27 +128,14 @@ def sensor_list():
 
 @app.route('/reading', methods=['GET'])
 def reading_list():
-    if 'since' in request.args:
-        since = dateutil.parser.parse(request.args['since'])
-    else:
-        since = datetime.now() - timedelta(days=1)
-
-    until = None
-    if 'until' in request.args:
-        until = dateutil.parser.parse(request.args['until'] + ' 23:59:59')
-
-    service = StoringService()
-
-    return hal_response(service.get_reading_list(since, until))
+    # Sensors UI deferred; historical readings live in Supabase.
+    return Response(response='Gone — use Supabase readings', status=410)
 
 
 @app.route('/history', methods=['GET'])
 def history_list():
-    page = int(request.args['page']) if 'page' in request.args else 1
-    count = int(request.args['count']) if 'count' in request.args else 25
-    storing = StoringService()
-
-    return hal_response(storing.get_events_history(page, count))
+    # Frontend reads switch_events from Supabase; keep empty HAL for old clients.
+    return hal_response([])
 
 
 @app.route('/cron', methods=['GET'])
@@ -176,6 +166,9 @@ def cron_list():
 
 @app.route('/cron', methods=['POST'])
 def cron_create():
+    ok, err = require_auth(request)
+    if not ok:
+        return Response(response=err[0], status=err[1])
     input_data = json.loads(request.data)
 
     cron = CronTab(user=True)
@@ -191,6 +184,9 @@ def cron_create():
 
 @app.route('/cron/<cron_id>', methods=['PUT'])
 def cron_edit(cron_id):
+    ok, err = require_auth(request)
+    if not ok:
+        return Response(response=err[0], status=err[1])
     input_data = json.loads(request.data)
 
     cron = CronTab(user=True)
@@ -227,15 +223,11 @@ def get_cron_command(input_data):
     pattern = 'curl localhost/api/switch/%s -XPATCH -d \'%s\' -H \'Content-Type: application/json\''
     return pattern % (input_data['switch'], json.dumps(payload))
 
-def get_authenticated_user(request):
-    if 'CF_Authorization' not in request.cookies:
-        return None
-
-    token = jwt.decode(request.cookies.get('CF_Authorization'), verify=False)
-    return token['email']
-
 @app.route('/cron/<cron_id>', methods=['DELETE'])
 def cron_delete(cron_id):
+    ok, err = require_auth(request)
+    if not ok:
+        return Response(response=err[0], status=err[1])
     cron = CronTab(user=True)
     for job in cron:
         if job.comment.find(cron_id) != -1:
@@ -264,3 +256,11 @@ if __name__ != 'pihome-api':  # wsgi
         print('> Caching sensors state ' + datetime.now().strftime('%Y-%m-%d %H:%M'))
         service = StoringService()
         service.cache_sensors_state()
+    elif len(sys.argv) > 1 and sys.argv[1] == '--flush-outbox':
+        StoringService().flush_outbox()
+    elif len(sys.argv) > 1 and sys.argv[1] == '--sync-switch-state':
+        print('> Sync switch_state to Supabase ' + datetime.now().strftime('%Y-%m-%d %H:%M'))
+        switch = SwitchService()
+        storing = StoringService()
+        for info in switch.get_list(True).values():
+            storing.upsert_switch_state(info)

@@ -120,6 +120,11 @@ class SwitchService:
                 'type': device['type']}
 
         self.cache.hset('_switches', key, json.dumps(info, default=dthandler))
+        try:
+            from store import StoringService
+            StoringService().upsert_switch_state(info)
+        except Exception:
+            pass
 
         return info
 

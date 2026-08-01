@@ -118,6 +118,13 @@ storing:
         user: 'user'
         pass: 'pass'
         collection: 'pithermo'
+    supabase:
+        url: 'https://YOUR_PROJECT.supabase.co'
+        service_role_key: 'YOUR_SERVICE_ROLE_KEY'
+        anon_key: 'YOUR_ANON_KEY'
+        # Optional: HS256 secret if project still uses legacy JWT secret
+        # jwt_secret: ''
+        # jwt_issuer: 'https://YOUR_PROJECT.supabase.co/auth/v1'
     rabbitmq:
         host: 'localhost'
         user: 'guest'
