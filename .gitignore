@@ -51,3 +51,4 @@ target/
 var/
 venv
 .supabase_jwks.json
+supabase/.temp/
