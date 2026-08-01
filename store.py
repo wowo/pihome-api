@@ -9,7 +9,7 @@ import traceback
 
 import yaml
 
-from supabase_client import flush_queue, insert_rows, upsert_rows
+from supabase_client import flush_queue, insert_rows, select_rows, upsert_rows
 
 DATE_FORMAT = '%Y-%m-%d %H:%M'
 
@@ -46,6 +46,37 @@ class StoringService:
         n = flush_queue()
         print('> flushed %s supabase outbox items' % n)
         return n
+
+    def list_switch_events(self, page=1, count=25):
+        """LAN / legacy clients: page switch_events from Supabase (service role)."""
+        page = max(1, int(page or 1))
+        count = max(1, min(100, int(count or 25)))
+        offset = (page - 1) * count
+        rows = select_rows(
+            'switch_events',
+            {
+                'select': 'id,date,switch,state,user_email',
+                'order': 'date.desc',
+                'offset': offset,
+                'limit': count,
+            },
+        )
+        names = {
+            k: v.get('name', k)
+            for k, v in (self.base_config.get('switch') or {}).get('devices', {}).items()
+        }
+        out = []
+        for row in rows:
+            out.append({
+                'id': row.get('id'),
+                'date': row.get('date'),
+                'switch': row.get('switch'),
+                'state': row.get('state'),
+                'user': row.get('user_email'),
+                'user_email': row.get('user_email'),
+                'name': names.get(row.get('switch'), row.get('switch')),
+            })
+        return out
 
     # Legacy CLI entrypoints kept as no-ops so existing cron lines don't crash.
     def store_sensors_state(self):

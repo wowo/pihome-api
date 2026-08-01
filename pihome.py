@@ -134,8 +134,10 @@ def reading_list():
 
 @app.route('/history', methods=['GET'])
 def history_list():
-    # Frontend reads switch_events from Supabase; keep empty HAL for old clients.
-    return hal_response([])
+    # Domain PWA reads Supabase directly; LAN uses this service-role proxy.
+    page = request.args.get('page', 1)
+    count = request.args.get('count', 25)
+    return hal_response(StoringService().list_switch_events(page, count))
 
 
 @app.route('/cron', methods=['GET'])

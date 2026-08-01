@@ -1,16 +1,24 @@
 """Minimal Supabase PostgREST client with Redis offline queue.
 
 ponytail: at-least-once queue via Redis list; upgrade to outbox table if volume grows.
+HTTPS goes through curl under eventlet because requests/urllib3 SSL breaks
+(wrap_socket ... _context) inside the gunicorn eventlet worker.
 """
 from __future__ import absolute_import, print_function
 
 import json
 import logging
 import os
+import subprocess
+import sys
 from datetime import datetime
 
-import requests
 import yaml
+
+try:
+    from urllib.parse import urlencode
+except ImportError:
+    from urllib import urlencode
 
 QUEUE_KEY = 'supabase_outbox'
 JWKS_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), '.supabase_jwks.json')
@@ -43,6 +51,49 @@ def _url(table):
     return cfg['url'].rstrip('/') + '/rest/v1/' + table
 
 
+def _use_curl():
+    # eventlet monkey-patches break requests HTTPS on this Pi stack
+    return 'eventlet' in sys.modules
+
+
+def _http(method, url, headers, payload=None, params=None, timeout=8):
+    """Return (status_code, body_text)."""
+    if params:
+        url = url + ('&' if '?' in url else '?') + urlencode(params, doseq=True)
+    body = None if payload is None else json.dumps(payload, default=str)
+
+    if _use_curl():
+        return _http_curl(method, url, headers, body, timeout)
+
+    import requests
+    res = requests.request(method, url, headers=headers, data=body, timeout=timeout)
+    return res.status_code, res.text
+
+
+def _http_curl(method, url, headers, body, timeout):
+    cmd = [
+        'curl', '-sS', '-X', method,
+        '--max-time', str(timeout),
+        '-w', '\n%{http_code}',
+    ]
+    for k, v in headers.items():
+        if v is not None:
+            cmd.extend(['-H', '%s: %s' % (k, v)])
+    if body is not None:
+        cmd.extend(['--data-binary', body])
+    cmd.append(url)
+    out = subprocess.check_output(cmd)
+    text = out.decode('utf-8', 'replace')
+    if '\n' not in text:
+        return 0, text
+    body_text, status_s = text.rsplit('\n', 1)
+    try:
+        status = int(status_s.strip())
+    except ValueError:
+        status = 0
+    return status, body_text
+
+
 def enqueue(method, table, payload, params=None):
     item = {
         'method': method,
@@ -60,16 +111,9 @@ def _request(method, table, payload=None, params=None, queue_on_fail=True):
         logging.warning('supabase not configured; enqueue skipped for %s %s', method, table)
         return False
     try:
-        res = requests.request(
-            method,
-            _url(table),
-            headers=_headers(True),
-            params=params,
-            json=payload,
-            timeout=8,
-        )
-        if res.status_code >= 400:
-            raise RuntimeError('supabase %s %s -> %s %s' % (method, table, res.status_code, res.text[:200]))
+        status, text = _http(method, _url(table), _headers(True), payload=payload, params=params)
+        if status >= 400:
+            raise RuntimeError('supabase %s %s -> %s %s' % (method, table, status, text[:200]))
         return True
     except Exception as e:
         logging.warning('supabase request failed: %s', e)
@@ -88,8 +132,23 @@ def upsert_rows(table, rows, on_conflict='key'):
     if not rows:
         return True
     params = {'on_conflict': on_conflict}
-    # Prefer header already set for merge-duplicates
     return _request('POST', table, rows, params=params)
+
+
+def select_rows(table, params=None):
+    """Read rows (service role). Returns list or [] on failure; does not enqueue."""
+    cfg = _config()
+    if not cfg.get('url') or not cfg.get('service_role_key'):
+        return []
+    try:
+        status, text = _http('GET', _url(table), _headers(True), params=params or {})
+        if status >= 400:
+            raise RuntimeError('supabase GET %s -> %s %s' % (table, status, text[:200]))
+        data = json.loads(text) if text else []
+        return data if isinstance(data, list) else []
+    except Exception as e:
+        logging.warning('supabase select failed: %s', e)
+        return []
 
 
 def flush_queue(max_items=50):
@@ -123,9 +182,10 @@ def fetch_jwks(force=False):
     if not force and os.path.exists(JWKS_PATH):
         return json.load(open(JWKS_PATH))
     url = cfg.get('jwks_url') or (cfg.get('url', '').rstrip('/') + '/auth/v1/.well-known/jwks.json')
-    res = requests.get(url, timeout=8)
-    res.raise_for_status()
-    data = res.json()
+    status, text = _http('GET', url, {}, timeout=8)
+    if status >= 400:
+        raise RuntimeError('jwks fetch failed: %s %s' % (status, text[:200]))
+    data = json.loads(text)
     with open(JWKS_PATH, 'w') as f:
         json.dump(data, f)
     return data

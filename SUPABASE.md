@@ -17,9 +17,19 @@ storing:
 Replace sensor crons with:
 
 ```
-* * * * * cd /var/www/pihome-api && /usr/bin/python pihome.py --flush-outbox
-*/5 * * * * cd /var/www/pihome-api && /usr/bin/python pihome.py --sync-switch-state
+* * * * * cd /var/www/pihome-api && /usr/bin/python3 pihome.py --flush-outbox
+*/5 * * * * cd /var/www/pihome-api && /usr/bin/python3 pihome.py --sync-switch-state
 ```
+
+After deploying Python changes, restart both services (Celery keeps old code in the fork pool otherwise):
+
+```
+sudo systemctl restart gunicorn celery_pihome
+```
+
+HTTPS to Supabase uses `curl` inside the gunicorn eventlet worker (`requests` SSL is broken there). Cron flush uses plain `requests`.
+
+LAN clients can `GET /api/history` (service-role proxy). The domain PWA reads `switch_events` from Supabase directly when logged in.
 
 ## Migrate Mongo data
 
