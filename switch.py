@@ -429,6 +429,7 @@ class ClickSequenceSwitch(AbstractSwitch):
                 switch = ClickSwitch(
                     operation['switch'],
                     operation['pin'],
+                    None,
                 )
                 switch.set_state(new_state, user)
             else:
