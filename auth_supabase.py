@@ -1,12 +1,19 @@
-"""Verify Supabase JWTs with disk-cached JWKS. LAN/localhost bypass."""
+"""Verify Supabase JWTs with disk-cached JWKS. LAN/localhost bypass.
+
+ponytail: Pi has PyJWT 1.7 without ES256 JWK support; verify P-256 signatures
+via cryptography directly. Fall back to /auth/v1/user via curl if needed.
+"""
 from __future__ import absolute_import
 
+import base64
+import json
 import logging
 import os
+import time
 
 import jwt
 
-from supabase_client import JWKS_PATH, _config, fetch_jwks
+from supabase_client import JWKS_PATH, _config, _http, fetch_jwks
 
 LAN_PREFIXES = (
     '127.',
@@ -15,6 +22,9 @@ LAN_PREFIXES = (
     '::1',
     'localhost',
 )
+
+# token -> (expires_at_monotonic, claims)
+_token_cache = {}
 
 
 def is_lan_request(req):
@@ -29,14 +39,12 @@ def is_lan_request(req):
 
 def get_authenticated_user(req):
     """Return email for history attribution. None when anonymous LAN/cron."""
-    # Optional LAN attribution header
     header_user = req.headers.get('X-PiHome-User')
     if header_user:
         return header_user
 
     auth = req.headers.get('Authorization') or ''
     if not auth.startswith('Bearer '):
-        # Legacy CF cookie during transition
         if 'CF_Authorization' in req.cookies:
             try:
                 token = jwt.decode(req.cookies.get('CF_Authorization'), options={'verify_signature': False})
@@ -48,7 +56,7 @@ def get_authenticated_user(req):
     claims = verify_bearer(auth[7:])
     if not claims:
         return None
-    return claims.get('email') or claims.get('user_metadata', {}).get('email')
+    return claims.get('email') or (claims.get('user_metadata') or {}).get('email')
 
 
 def require_auth(req):
@@ -64,37 +72,114 @@ def require_auth(req):
     return True, None
 
 
-def verify_bearer(token):
+def _b64url_decode(data):
+    if isinstance(data, bytes):
+        data = data.decode('ascii')
+    pad = '=' * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + pad)
+
+
+def _verify_es256(token, jwks):
+    """Verify ES256 JWT with cryptography (works on PyJWT 1.7 / crypto 3.x)."""
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+
+    parts = token.split('.')
+    if len(parts) != 3:
+        raise ValueError('bad jwt')
+    header = json.loads(_b64url_decode(parts[0]))
+    kid = header.get('kid')
+    jwk = None
+    for candidate in jwks.get('keys', []):
+        if candidate.get('kty') != 'EC':
+            continue
+        if kid is None or candidate.get('kid') == kid:
+            jwk = candidate
+            break
+    if jwk is None:
+        raise ValueError('no EC jwk for kid=%s' % kid)
+
+    x = int.from_bytes(_b64url_decode(jwk['x']), 'big')
+    y = int.from_bytes(_b64url_decode(jwk['y']), 'big')
+    pub = ec.EllipticCurvePublicNumbers(x, y, ec.SECP256R1()).public_key(default_backend())
+
+    signing_input = ('%s.%s' % (parts[0], parts[1])).encode('ascii')
+    sig = _b64url_decode(parts[2])
+    if len(sig) != 64:
+        raise ValueError('bad es256 sig length')
+    der = encode_dss_signature(
+        int.from_bytes(sig[:32], 'big'),
+        int.from_bytes(sig[32:], 'big'),
+    )
+    pub.verify(der, signing_input, ec.ECDSA(hashes.SHA256()))
+
+    claims = json.loads(_b64url_decode(parts[1]))
+    now = int(time.time())
+    if claims.get('exp') and now > int(claims['exp']) + 30:
+        raise ValueError('token expired')
+    return claims
+
+
+def _verify_via_supabase(token):
+    """Network fallback: ask Supabase who this token is (curl under eventlet)."""
     cfg = _config()
-    audience = cfg.get('jwt_audience') or 'authenticated'
-    issuer = cfg.get('jwt_issuer') or (cfg.get('url', '').rstrip('/') + '/auth/v1')
+    url = cfg.get('url', '').rstrip('/') + '/auth/v1/user'
+    key = cfg.get('anon_key') or cfg.get('service_role_key')
+    status, text = _http(
+        'GET',
+        url,
+        {
+            'Authorization': 'Bearer ' + token,
+            'apikey': key,
+        },
+        timeout=5,
+    )
+    if status != 200:
+        raise ValueError('supabase user %s %s' % (status, text[:120]))
+    data = json.loads(text)
+    return {
+        'email': data.get('email'),
+        'sub': data.get('id'),
+        'user_metadata': data.get('user_metadata') or {},
+    }
+
+
+def verify_bearer(token):
+    if not token:
+        return None
+    cached = _token_cache.get(token)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+
+    claims = None
     try:
         if not os.path.exists(JWKS_PATH):
             fetch_jwks(force=True)
-        # PyJWKClient can use file:// or we construct from cached JSON
         jwks = fetch_jwks(force=False)
-        from jwt.algorithms import RSAAlgorithm
-        header = jwt.get_unverified_header(token)
-        kid = header.get('kid')
-        key = None
-        for jwk in jwks.get('keys', []):
-            if jwk.get('kid') == kid or kid is None:
-                key = RSAAlgorithm.from_jwk(jwk)
-                break
-        if key is None and jwks.get('keys'):
-            key = RSAAlgorithm.from_jwk(jwks['keys'][0])
-        if key is None:
-            # Symmetric fallback for legacy JWT secret if configured
-            secret = cfg.get('jwt_secret')
-            if secret:
-                return jwt.decode(token, secret, algorithms=['HS256'], audience=audience, issuer=issuer)
-            return None
-        return jwt.decode(token, key=key, algorithms=['RS256', 'ES256'], audience=audience, options={'verify_aud': False})
+        claims = _verify_es256(token, jwks)
     except Exception as e:
-        logging.warning('jwt verify failed: %s', e)
-        # Refresh JWKS once on failure (key rotation)
+        logging.warning('jwt local verify failed: %s', e)
         try:
             fetch_jwks(force=True)
-        except Exception:
-            pass
-        return None
+            claims = _verify_es256(token, fetch_jwks(force=False))
+        except Exception as e2:
+            logging.warning('jwt local verify retry failed: %s', e2)
+            try:
+                claims = _verify_via_supabase(token)
+            except Exception as e3:
+                logging.warning('jwt supabase verify failed: %s', e3)
+                return None
+
+    # Cache until near exp (cap 5 min)
+    ttl = 300
+    exp = claims.get('exp')
+    if exp:
+        ttl = max(30, min(300, int(exp) - int(time.time())))
+    _token_cache[token] = (time.monotonic() + ttl, claims)
+    if len(_token_cache) > 64:
+        # ponytail: drop oldest-ish entries
+        for k in list(_token_cache.keys())[:16]:
+            _token_cache.pop(k, None)
+    return claims
