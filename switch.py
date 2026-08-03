@@ -90,24 +90,36 @@ class SwitchService:
         revoked = self.__get_revoked()
         for entry in self.__get_schedule():
             args = eval(entry['request']['args'])
-            if args[0] == key and args[2] and entry['request']['id'] not in revoked:
+            # toggle_switch(key, state, revoke_other); skip short args (e.g. wicket_step)
+            if len(args) >= 3 and args[0] == key and args[2] and entry['request']['id'] not in revoked:
                 logging.warning('revoking ' + key)
                 revoke(entry['request']['id'], Terminate=True)
                 self.__schedule = None
                 self.__revoked = None
 
+    def run_wicket_step(self, key, step):
+        device = self.config['devices'][key]
+        driver = self.__get_switch_driver(device)
+        if not isinstance(driver, ClickSequenceSwitch):
+            return
+        driver.run_step(step)
+        EthernetSwitch.led_api_cache = None
+        self.__get_switch(str(key))
+
     def __get_switch(self, key):
         device = self.config['devices'][key]
+        driver = self.__get_switch_driver(device)
 
         scheduled = None
-        if self.__get_switch_driver(device).allow_show_schedule():
+        if isinstance(driver, ClickSequenceSwitch):
+            scheduled = driver.get_sequence_scheduled()
+        elif driver.allow_show_schedule():
             revoked = self.__get_revoked()
             for entry in self.__get_schedule():
                 args = eval(entry['request']['args'])
-                if args[0] == key and entry['request']['id'] not in revoked:
+                if len(args) >= 2 and args[0] == key and entry['request']['id'] not in revoked:
                     scheduled = {'when': entry['eta'], 'state': args[1]}
                     break
-        state = self.get_state(device)
         info = {'key': key,
                 'name': device['name'],
                 'state': self.get_state(device),
@@ -196,6 +208,10 @@ class SwitchService:
             return ClickSequenceSwitch(
                 params['id'],
                 params['sequence'],
+                self.cache,
+                params.get('open_seconds', 5),
+                params.get('wait_seconds', 60),
+                params.get('close_ui_seconds', 5),
             )
         else:
             raise RuntimeError('Unknown switch driver ' + params['type'])
@@ -414,27 +430,110 @@ class AggregateSwitch(AbstractSwitch):
 
 
 class ClickSequenceSwitch(AbstractSwitch):
-    def __init__(self, switch_id, sequence):
+    """Wicket (Furtka): open pulse → stop pulse → wait → close pulse + fake closing UI."""
+
+    def __init__(self, switch_id, sequence, cache, open_seconds=5, wait_seconds=60, close_ui_seconds=5):
         AbstractSwitch.__init__(self)
         self.switch_id = switch_id  # type: str
-        self.sequence = sequence  # type: array
+        self.sequence = sequence
+        self.cache = cache
+        self.open_seconds = int(open_seconds)
+        self.wait_seconds = int(wait_seconds)
+        self.close_ui_seconds = int(close_ui_seconds)
+        self.target = sequence[0]
+
+    def _redis_key(self):
+        return 'wicket:' + self.switch_id
+
+    def _load(self):
+        raw = self.cache.get(self._redis_key())
+        return json.loads(raw) if raw else None
+
+    def _save(self, phase, ends_at, task_ids):
+        self.cache.set(self._redis_key(), json.dumps({
+            'phase': phase,
+            'ends_at': ends_at,
+            'task_ids': task_ids,
+        }))
+
+    def _clear(self):
+        self.cache.delete(self._redis_key())
+
+    def _pulse(self, user):
+        ClickSwitch(self.target['switch'], self.target['pin'], None).set_state(1, user)
+
+    def _ends_iso(self, seconds_from_now):
+        return (datetime.utcnow() + timedelta(seconds=int(seconds_from_now))).isoformat() + 'Z'
+
+    def get_sequence_scheduled(self):
+        data = self._load()
+        if not data:
+            return None
+        return {
+            'kind': 'wicket',
+            'phase': data['phase'],
+            'ends_at': data['ends_at'],
+            'open_s': self.open_seconds,
+            'wait_s': self.wait_seconds,
+            'close_ui_s': self.close_ui_seconds,
+        }
 
     def get_state(self):
         return 0
 
     def set_state(self, new_state, user):
-        from tasks import toggle_switch
-        for operation in self.sequence:
-            if 0 == operation['execute_after']:
-                switch = ClickSwitch(
-                    operation['switch'],
-                    operation['pin'],
-                    None,
-                )
-                switch.set_state(new_state, user)
-            else:
-                eta = datetime.utcnow() + timedelta(seconds=int(operation['execute_after']))
-                toggle_switch.apply_async((operation['switch'], 1, False), eta=eta)
+        data = self._load()
+        if data:
+            phase = data.get('phase')
+            if phase in ('opening', 'closing'):
+                return
+            if phase == 'waiting':
+                self._early_close(data, user)
+                return
+        self._start(user)
+
+    def _start(self, user):
+        from tasks import wicket_step
+        self._pulse(user)
+        now = datetime.utcnow()
+        stop_eta = now + timedelta(seconds=self.open_seconds)
+        close_eta = now + timedelta(seconds=self.open_seconds + self.wait_seconds)
+        stop_id = wicket_step.apply_async((self.switch_id, 'stop'), eta=stop_eta).id
+        close_id = wicket_step.apply_async((self.switch_id, 'close'), eta=close_eta).id
+        self._save('opening', stop_eta.isoformat() + 'Z', [stop_id, close_id])
+
+    def _early_close(self, data, user):
+        from tasks import wicket_step
+        for tid in data.get('task_ids') or []:
+            revoke(tid, Terminate=True)
+        self._pulse(user)
+        clear_eta = datetime.utcnow() + timedelta(seconds=self.close_ui_seconds)
+        clear_id = wicket_step.apply_async((self.switch_id, 'clear'), eta=clear_eta).id
+        self._save('closing', clear_eta.isoformat() + 'Z', [clear_id])
+
+    def run_step(self, step):
+        data = self._load()
+        if step == 'clear':
+            self._clear()
+            return
+        if not data:
+            return
+        if step == 'stop':
+            if data.get('phase') != 'opening':
+                return
+            self._pulse('system')
+            # Keep remaining close task id(s); drop the stop id that just ran.
+            remaining = (data.get('task_ids') or [])[1:]
+            self._save('waiting', self._ends_iso(self.wait_seconds), remaining)
+            return
+        if step == 'close':
+            if data.get('phase') != 'waiting':
+                return
+            from tasks import wicket_step
+            self._pulse('system')
+            clear_eta = datetime.utcnow() + timedelta(seconds=self.close_ui_seconds)
+            clear_id = wicket_step.apply_async((self.switch_id, 'clear'), eta=clear_eta).id
+            self._save('closing', clear_eta.isoformat() + 'Z', [clear_id])
 
     def allow_show_schedule(self):
         return False

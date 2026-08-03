@@ -38,17 +38,12 @@ switch:
             id: gate_main_door_mode
             name: 'Brama furtka'
             type: click_sequence
-            # open a little → stop at 7s → close 1 min after stop
+            open_seconds: 5
+            wait_seconds: 60
+            close_ui_seconds: 5
             sequence:
                 - switch: gate_main
                   pin: 6
-                  execute_after: 0
-                - switch: gate_main
-                  pin: 6
-                  execute_after: 7
-                - switch: gate_main
-                  pin: 6
-                  execute_after: 67
             stateless: true
         gate_garage:
             id: gate_garage

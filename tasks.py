@@ -28,3 +28,11 @@ def notify_state_change(sensor_key, new_state, user='n/a'):
 
     service = StoringService()
     service.store_switch_state(sensor_key, new_state, date, user)
+
+
+@celery.task
+def wicket_step(key, step):
+    """Advance Furtka sequence: stop | close | clear."""
+    print('> Wicket step %s -> %s' % (key, step))
+    from switch import SwitchService
+    SwitchService().run_wicket_step(key, step)
